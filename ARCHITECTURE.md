@@ -467,3 +467,14 @@ ui/  可以依赖 →  logic/  可以依赖 →  data/
   - **根因 B**：模式看板 HTML 默认带 minimized 类，enderPattern() 虽会移除，但若 Vue 先部分渲染再失败可能时序错乱。
   - **修复 B**：从 index.html 的 #patternBoard 移除 minimized 类，默认展开。
   - **涉及文件**：src/ui/dashboards.js（BoardCard/EditModal/createBoardApp 模板）、src/ui/components/rank-vue.js（RankBoard 模板）、index.html（patternBoard 默认展开）。
+- **模式看板默认收起 + 保存按钮无反应 + 本月统计无数据 — Issue #10**：
+  - **A. 模式看板默认展开**：
+    - 根因：Issue #9c 错误地移除了 HTML #patternBoard 的 minimized 类（误解用户意图），且 enderPattern() 无条件 oardEl.classList.remove('minimized') 强制展开。
+    - 修复：① index.html 加回 minimized 类（默认收起）；② src/ui/boards-pattern.js enderPattern() 改为保持当前折叠/展开状态（	oggleBtn.textContent = boardEl.classList.contains('minimized') ? '▼' : '▲'），不再强制移除 minimized。
+  - **B. duiban/etf 编辑保存按钮无反应**：
+    - 根因：EditModal 组件 emit('window.save', ...) 发出的事件名是 'window.save'，但 createBoardApp 模板监听 @save（即 'save'），名称不匹配 → 保存处理器永不触发。
+    - 修复：src/ui/dashboards.js 将 emits: ['close', 'window.save'] 改为 ['close', 'save']，emit('window.save', ...) 改为 emit('save', ...)。
+  - **C. 本月统计无数据**：
+    - 根因：src/ui/boards-stats.js enderMonthlyStats() 调用 getStocksData() 和 loadAllData() 未加 window. 前缀 → ES module 中 ReferenceError → 整个函数中断 → 所有统计显示 0/空。
+    - 修复：改为 window.getStocksData() 和 window.loadAllData()。
+  - **涉及文件**：index.html、src/ui/boards-pattern.js、src/ui/dashboards.js、src/ui/boards-stats.js。

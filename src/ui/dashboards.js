@@ -557,7 +557,7 @@
 
   const EditModal = {
     props: ['show', 'title', 'data', 'defaultTotal', 'saving'],
-    emits: ['close', 'window.save'],
+    emits: ['close', 'save'],
     setup(props, { emit }) {
       const form = reactive({
         shuliang: '',
@@ -623,7 +623,7 @@
         const total = parseInt(form.shuliang, 10) || props.defaultTotal;
         const die = parseInt(form.die, 10) || 0;
         const zhang = parseInt(form.zhang, 10) || 0;
-        emit('window.save', {
+        emit('save', {
           shuliang: String(total),
           die_count: die,
           zhang_count: zhang,

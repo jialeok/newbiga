@@ -1,4 +1,4 @@
-// boards-stats.js — 从 boards-render.js 拆分（看板域: boards-stats.js）
+﻿// boards-stats.js — 从 boards-render.js 拆分（看板域: boards-stats.js）
 
         // 渲染圆形统计
         export function renderCircleStats() {
@@ -1275,7 +1275,7 @@
 
         // 根据日期获取标签数据
         export function getTagTitlesByDate(date) {
-            window.allData = loadAllData();
+            window.allData = window.loadAllData();
             if (!window.allData.tagTitles[date]) {
                 window.allData.tagTitles[date] = {
                     recentMulti: { tags: [], active: {}, score: 0 },
@@ -2593,7 +2593,7 @@
         // 渲染月统计
         export function renderMonthlyStats() {
             const monthRange = window.getMonthTradingDays(window.currentDate);
-            window.allData = getStocksData();
+            window.allData = window.getStocksData();
             
             // 遍历本月每一天（只统计到当前日期为止）
             let currentCheck = new Date(monthRange.firstDayObj);

@@ -1,4 +1,4 @@
-// boards-pattern.js — 从 boards-render.js 拆分（看板域: boards-pattern.js）
+﻿// boards-pattern.js — 从 boards-render.js 拆分（看板域: boards-pattern.js）
 
         // 获取当日模式数据（带自动延续和恢复功能）
         export function getTodayPattern() {
@@ -66,10 +66,9 @@
                 contentEl.innerHTML = '<div class="pattern-placeholder" id="patternPlaceholder">暂无模式心得，点击添加...</div>';
             }
             
-            // 始终显示展开/收起按钮；默认展开显示内容（用户期望直接看到模式心得，而非只剩标题栏）
+            // 始终显示展开/收起按钮；保持当前折叠/展开状态（HTML 默认 minimized=收起，用户可点击切换）
             toggleBtn.style.display = 'flex';
-            toggleBtn.textContent = '▲';
-            boardEl.classList.remove('minimized');
+            toggleBtn.textContent = boardEl.classList.contains('minimized') ? '▼' : '▲';
         }
 
         // 切换模式看板展开/收起
