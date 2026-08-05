@@ -9,6 +9,14 @@
 (function () {
   'use strict';
 
+  // [GRACE-DEGRADE] 当 Vue CDN 未加载（被墙/离线）时，window.Vue 不存在。直接解构 Vue 会抛
+  // "Vue is not defined" 并中断 entry.js 整条模块图，导致所有 render* 全局函数未能挂载、看板全白。
+  // 此处提前返回，保留原生 innerHTML 渲染路径（dashboards 看板在 Vue 缺失时整体不激活）。
+  if (typeof window === 'undefined' || typeof document === 'undefined' || typeof Vue === 'undefined') {
+    console.warn('[DASHBOARDS] Vue 未就绪，跳过 dashboards 组件初始化（保留原生渲染）');
+    return;
+  }
+
   const { createApp, ref, computed, watch, reactive, onMounted, nextTick } = Vue;
 
   window.SUPABASE_URL = 'https://tonqfgeyxnnwicjopshn.supabase.co';
@@ -737,22 +745,45 @@
   }
   window.injectStylesOnce = injectStylesOnce;
 
+  // [GRACE-DEGRADE] 记录各看板 Vue 挂载是否成功；失败时保留原生 innerHTML 渲染。
+  let duibanMounted = false, etfMounted = false;
+
   function mountBoards() {
     window.injectStylesOnce();
 
     const duibanEl = document.querySelector('.duiban-board.trading-day-element');
     const etfEl = document.querySelector('.etf-board.trading-day-element');
 
+    // [GRACE-DEGRADE] 保存原生容器内容。本环境 Vue 组件 createApp().mount() 可能抛错
+    // （c2Vue=false），mount 会先清空容器再渲染，失败则容器空 → 最近多板/板块ETF 看板只剩空框架。
+    // 故逐个 try/catch，失败时还原容器原始 innerHTML，保留原生 innerHTML 渲染路径。
+    const savedDuiban = duibanEl ? duibanEl.innerHTML : '';
+    const savedEtf = etfEl ? etfEl.innerHTML : '';
+
     if (duibanEl) {
-      duibanEl.innerHTML = '<div id="duiban-vue-root"></div>';
-      window.createBoardApp('最近多板', 'recentMulti', 56, window.saveRecentMulti, 'duiban')
-        .mount('#duiban-vue-root');
+      try {
+        duibanEl.innerHTML = '<div id="duiban-vue-root"></div>';
+        window.createBoardApp('最近多板', 'recentMulti', 56, window.saveRecentMulti, 'duiban')
+          .mount('#duiban-vue-root');
+        duibanMounted = duibanEl.children.length > 0;
+      } catch (e) { duibanMounted = false; }
+      if (!duibanMounted) {
+        duibanEl.innerHTML = savedDuiban;
+        if (window._dbgLog) window._dbgLog('[DASHBOARDS] duiban 挂载失败/空内容，回退原生渲染');
+      }
     }
 
     if (etfEl) {
-      etfEl.innerHTML = '<div id="etf-vue-root"></div>';
-      window.createBoardApp('早盘板块ETF表现', 'earlyEtf', 48, window.saveEarlyEtf, 'etf')
-        .mount('#etf-vue-root');
+      try {
+        etfEl.innerHTML = '<div id="etf-vue-root"></div>';
+        window.createBoardApp('早盘板块ETF表现', 'earlyEtf', 48, window.saveEarlyEtf, 'etf')
+          .mount('#etf-vue-root');
+        etfMounted = etfEl.children.length > 0;
+      } catch (e) { etfMounted = false; }
+      if (!etfMounted) {
+        etfEl.innerHTML = savedEtf;
+        if (window._dbgLog) window._dbgLog('[DASHBOARDS] etf 挂载失败/空内容，回退原生渲染');
+      }
     }
 
     window.ensureDateWatch();
@@ -832,200 +863,210 @@
   };
 
   // 覆盖旧版全局函数，确保所有旧调用都进入新的 Supabase 链路
+  // [GRACE-DEGRADE] 仅当对应 Vue 看板挂载成功才接管其 渲染/读取/编辑 函数；
+  // 挂载失败（c2Vue=false：组件模板里访问 window.xxx 在 Vue3 模板作用域中不存在 → 渲染抛错）
+  // 时容器已还原为原生结构，必须完整保留 boards-duiban.js / boards-etf.js 的原生
+  // localStorage 链路（renderDuiban/renderEtf/getTodayDuiban/getTodayEtf/getEtfData/编辑保存等）。
+  // 否则会出现：① 原生容器已还原、渲染函数却被改成只刷 Vue 数据 → 最近多板看板只剩空框架；
+  // ② getEtfData 被改成只返回当天数据 → 周末统计看板的 ETF/多板历史聚合全部丢失（统计看板缺数据）。
   function installOverrides() {
-    window.getTodayDuiban = function() {
-      const d = boardStore.recentMulti;
-      if (!d) return [];
-      return [window.legacyRowFromData(d)];
-    };
+    if (duibanMounted) {
+      window.getTodayDuiban = function() {
+        const d = boardStore.recentMulti;
+        if (!d) return [];
+        return [window.legacyRowFromData(d)];
+      };
 
-    window.getTodayDuibanComment = function() {
-      return boardStore.recentMulti?.comment || '';
-    };
+      window.getTodayDuibanComment = function() {
+        return boardStore.recentMulti?.comment || '';
+      };
 
-    window.getEtfData = function() {
-      const date = boardStore.currentDate;
-      if (!date) return {};
-      const obj = {};
-      const d = boardStore.earlyEtf;
-      if (d && (d.shuliang || d.die_zhangbi || d.jingtu || d.tushi)) {
-        obj[date] = [window.legacyRowFromData(d)];
-      }
-      return obj;
-    };
+      window.saveTodayDuiban = function() {
+        // 旧函数签名是 saveTodayDuiban(duibanList)，已无需主动调用
+        console.warn('[Board] window.saveTodayDuiban 已弃用，数据直接写 Supabase');
+      };
 
-    window.getTodayEtf = function() {
-      const d = boardStore.earlyEtf;
-      if (!d) return [];
-      return [window.legacyRowFromData(d)];
-    };
+      window.renderDuiban = function() {
+        // Vue 自动渲染，仅刷新数据
+        if (boardStore.currentDate) window.loadRecentMulti(boardStore.currentDate);
+      };
 
-    window.getTodayEtfComment = function() {
-      return boardStore.earlyEtf?.comment || '';
-    };
+      window.openDuibanEdit = function() {
+        boardApi.openRecentMultiModal();
+      };
 
-    window.saveTodayDuiban = function() {
-      // 旧函数签名是 saveTodayDuiban(duibanList)，已无需主动调用
-      console.warn('[Board] window.saveTodayDuiban 已弃用，数据直接写 Supabase');
-    };
+      window.openDuibanCommentEdit = function() {
+        boardApi.openRecentMultiModal();
+      };
 
-    window.renderDuiban = function() {
-      // Vue 自动渲染，仅刷新数据
-      if (boardStore.currentDate) window.loadRecentMulti(boardStore.currentDate);
-    };
+      window.saveDuiban = async function() {
+        // 旧 modal 不再使用；若被触发，把表单值同步到 store 并保存
+        const row = document.getElementById('duiban-row-0');
+        if (!row) return;
+        const die = (row.querySelector('[name="die-0"]')?.value || '').trim();
+        const zhang = (row.querySelector('[name="zhang-0"]')?.value || '').trim();
+        const total = (row.querySelector('[name="shuliang-0"]')?.value || '').trim();
+        const jingtu = (row.querySelector('[name="jingtu-0"]')?.value || '').trim();
+        const tushi = (row.querySelector('[name="tushi-0"]')?.value || '').trim();
+        const nTotal = parseInt(total, 10) || 56;
+        const nDie = parseInt(die, 10) || 0;
+        const nZhang = parseInt(zhang, 10) || 0;
+        await window.saveRecentMulti({
+          shuliang: String(nTotal),
+          die_count: nDie,
+          zhang_count: nZhang,
+          die_zhangbi: window.buildDieZhangbi(nDie, nZhang),
+          jingtu,
+          tushi,
+          comment: boardStore.recentMulti?.comment || ''
+        });
+        if (typeof window.closeDuibanModal === 'function') window.closeDuibanModal();
+      };
 
-    window.renderEtf = function() {
-      if (boardStore.currentDate) window.loadEarlyEtf(boardStore.currentDate);
-    };
+      window.saveDuibanComment = async function() {
+        const input = document.getElementById('duibanCommentInput');
+        const comment = input ? input.value.trim() : '';
+        const existing = boardStore.recentMulti || {};
+        await window.saveRecentMulti({
+          shuliang: existing.shuliang || '',
+          die_count: existing.die_count ?? null,
+          zhang_count: existing.zhang_count ?? null,
+          die_zhangbi: existing.die_zhangbi || '',
+          jingtu: existing.jingtu || '',
+          tushi: existing.tushi || '',
+          comment
+        });
+        if (typeof window.closeDuibanCommentModal === 'function') window.closeDuibanCommentModal();
+      };
 
-    window.openDuibanEdit = function() {
-      boardApi.openRecentMultiModal();
-    };
+      window.recalcDuibanFromAuction = async function() {
+        // 保留原有语义：从早盘竞价列表统计后写入
+        if (typeof window.getTodayAuction !== 'function') return;
+        const auctionList = window.getTodayAuction();
+        const total = auctionList.length;
+        if (total === 0) return;
+        let riseCount = 0;
+        auctionList.forEach(item => {
+          const note = item.note || '';
+          if (note.includes('涨停')) { riseCount++; return; }
+          if (note.includes('跌停')) return;
+          const percentMatch = note.match(/-?\d+\.?\d*%/);
+          if (percentMatch) {
+            const value = parseFloat(percentMatch[0]);
+            if (value > 0) riseCount++;
+          }
+        });
+        await boardApi.recalcDuibanFromAuction(total, total - riseCount, riseCount);
+      };
 
-    window.openEtfEdit = function() {
-      boardApi.openEtfModal();
-    };
-
-    window.openDuibanCommentEdit = function() {
-      boardApi.openRecentMultiModal();
-    };
-
-    window.openEtfCommentEdit = function() {
-      boardApi.openEtfModal();
-    };
-
-    window.saveDuiban = async function() {
-      // 旧 modal 不再使用；若被触发，把表单值同步到 store 并保存
-      const row = document.getElementById('duiban-row-0');
-      if (!row) return;
-      const die = (row.querySelector('[name="die-0"]')?.value || '').trim();
-      const zhang = (row.querySelector('[name="zhang-0"]')?.value || '').trim();
-      const total = (row.querySelector('[name="shuliang-0"]')?.value || '').trim();
-      const jingtu = (row.querySelector('[name="jingtu-0"]')?.value || '').trim();
-      const tushi = (row.querySelector('[name="tushi-0"]')?.value || '').trim();
-      const nTotal = parseInt(total, 10) || 56;
-      const nDie = parseInt(die, 10) || 0;
-      const nZhang = parseInt(zhang, 10) || 0;
-      await window.saveRecentMulti({
-        shuliang: String(nTotal),
-        die_count: nDie,
-        zhang_count: nZhang,
-        die_zhangbi: window.buildDieZhangbi(nDie, nZhang),
-        jingtu,
-        tushi,
-        comment: boardStore.recentMulti?.comment || ''
-      });
-      if (typeof window.closeDuibanModal === 'function') window.closeDuibanModal();
-    };
-
-    window.saveEtf = async function() {
-      const container = document.getElementById('etfEditTableBody');
-      if (!container) return;
-      const row = container.querySelector('.etf-edit-row');
-      if (!row) return;
-      const shuliang = (row.querySelector('[name^="shuliang-"]')?.value || '').trim();
-      const zhang = (row.querySelector('[name^="zhang-"]')?.value || '').trim();
-      const die = (row.querySelector('[name^="die-"]')?.value || '').trim();
-      const jingtu = (row.querySelector('[name^="jingtu-"]')?.value || '').trim();
-      const tushi = (row.querySelector('[name^="tushi-"]')?.value || '').trim();
-      const nTotal = parseInt(shuliang, 10) || 48;
-      const nZhang = parseInt(zhang, 10) || (die ? nTotal - parseInt(die, 10) : 0);
-      const nDie = parseInt(die, 10) || Math.max(0, nTotal - nZhang);
-      await window.saveEarlyEtf({
-        shuliang: String(nTotal),
-        die_count: nDie,
-        zhang_count: nZhang,
-        die_zhangbi: window.buildDieZhangbi(nDie, nZhang),
-        jingtu,
-        tushi,
-        comment: boardStore.earlyEtf?.comment || ''
-      });
-      if (typeof window.closeEtfModal === 'function') window.closeEtfModal();
-    };
-
-    window.saveDuibanComment = async function() {
-      const input = document.getElementById('duibanCommentInput');
-      const comment = input ? input.value.trim() : '';
-      const existing = boardStore.recentMulti || {};
-      await window.saveRecentMulti({
-        shuliang: existing.shuliang || '',
-        die_count: existing.die_count ?? null,
-        zhang_count: existing.zhang_count ?? null,
-        die_zhangbi: existing.die_zhangbi || '',
-        jingtu: existing.jingtu || '',
-        tushi: existing.tushi || '',
-        comment
-      });
-      if (typeof window.closeDuibanCommentModal === 'function') window.closeDuibanCommentModal();
-    };
-
-    window.saveEtfComment = async function() {
-      const input = document.getElementById('etfCommentInput');
-      const comment = input ? input.value.trim() : '';
-      const existing = boardStore.earlyEtf || {};
-      await window.saveEarlyEtf({
-        shuliang: existing.shuliang || '',
-        die_count: existing.die_count ?? null,
-        zhang_count: existing.zhang_count ?? null,
-        die_zhangbi: existing.die_zhangbi || '',
-        jingtu: existing.jingtu || '',
-        tushi: existing.tushi || '',
-        comment
-      });
-      if (typeof window.closeEtfCommentModal === 'function') window.closeEtfCommentModal();
-    };
-
-    window.recalcDuibanFromAuction = async function() {
-      // 保留原有语义：从早盘竞价列表统计后写入
-      if (typeof window.getTodayAuction !== 'function') return;
-      const auctionList = window.getTodayAuction();
-      const total = auctionList.length;
-      if (total === 0) return;
-      let riseCount = 0;
-      auctionList.forEach(item => {
-        const note = item.note || '';
-        if (note.includes('涨停')) { riseCount++; return; }
-        if (note.includes('跌停')) return;
-        const percentMatch = note.match(/-?\d+\.?\d*%/);
-        if (percentMatch) {
-          const value = parseFloat(percentMatch[0]);
-          if (value > 0) riseCount++;
+      window.clearDuiban = async function() {
+        if (!boardStore.currentDate) return;
+        if (!confirm('确定要清除所有最近多板数据吗？')) return;
+        try {
+          const sb = window.getDashboardsSupabase();
+          await sb.from('recent_multi_data').delete().eq('date', boardStore.currentDate);
+          boardStore.recentMulti = null;
+          window.syncToLegacyStorage();
+          window.toast('✅ 最近多板数据已清除');
+        } catch (e) {
+          window.warnToast('清除失败: ' + (e.message || e));
         }
-      });
-      await boardApi.recalcDuibanFromAuction(total, total - riseCount, riseCount);
-    };
+      };
+    } // end if (duibanMounted)
 
-    window.syncSectorEtfZhangNum = async function(zhangNum) {
-      await boardApi.syncSectorEtfZhangNum(zhangNum);
-    };
+    if (etfMounted) {
+      window.getEtfData = function() {
+        const date = boardStore.currentDate;
+        if (!date) return {};
+        const obj = {};
+        const d = boardStore.earlyEtf;
+        if (d && (d.shuliang || d.die_zhangbi || d.jingtu || d.tushi)) {
+          obj[date] = [window.legacyRowFromData(d)];
+        }
+        return obj;
+      };
 
-    window.clearDuiban = async function() {
-      if (!boardStore.currentDate) return;
-      if (!confirm('确定要清除所有最近多板数据吗？')) return;
-      try {
-        const sb = window.getDashboardsSupabase();
-        await sb.from('recent_multi_data').delete().eq('date', boardStore.currentDate);
-        boardStore.recentMulti = null;
-        window.syncToLegacyStorage();
-        window.toast('✅ 最近多板数据已清除');
-      } catch (e) {
-        window.warnToast('清除失败: ' + (e.message || e));
-      }
-    };
+      window.getTodayEtf = function() {
+        const d = boardStore.earlyEtf;
+        if (!d) return [];
+        return [window.legacyRowFromData(d)];
+      };
 
-    window.clearEtf = async function() {
-      if (!boardStore.currentDate) return;
-      if (!confirm('确定要清除所有ETF数据吗？')) return;
-      try {
-        const sb = window.getDashboardsSupabase();
-        await sb.from('early_etf_data').delete().eq('date', boardStore.currentDate);
-        boardStore.earlyEtf = null;
-        window.syncToLegacyStorage();
-        window.toast('✅ ETF数据已清除');
-      } catch (e) {
-        window.warnToast('清除失败: ' + (e.message || e));
-      }
-    };
+      window.getTodayEtfComment = function() {
+        return boardStore.earlyEtf?.comment || '';
+      };
+
+      window.renderEtf = function() {
+        if (boardStore.currentDate) window.loadEarlyEtf(boardStore.currentDate);
+      };
+
+      window.openEtfEdit = function() {
+        boardApi.openEtfModal();
+      };
+
+      window.openEtfCommentEdit = function() {
+        boardApi.openEtfModal();
+      };
+
+      window.saveEtf = async function() {
+        const container = document.getElementById('etfEditTableBody');
+        if (!container) return;
+        const row = container.querySelector('.etf-edit-row');
+        if (!row) return;
+        const shuliang = (row.querySelector('[name^="shuliang-"]')?.value || '').trim();
+        const zhang = (row.querySelector('[name^="zhang-"]')?.value || '').trim();
+        const die = (row.querySelector('[name^="die-"]')?.value || '').trim();
+        const jingtu = (row.querySelector('[name^="jingtu-"]')?.value || '').trim();
+        const tushi = (row.querySelector('[name^="tushi-"]')?.value || '').trim();
+        const nTotal = parseInt(shuliang, 10) || 48;
+        const nZhang = parseInt(zhang, 10) || (die ? nTotal - parseInt(die, 10) : 0);
+        const nDie = parseInt(die, 10) || Math.max(0, nTotal - nZhang);
+        await window.saveEarlyEtf({
+          shuliang: String(nTotal),
+          die_count: nDie,
+          zhang_count: nZhang,
+          die_zhangbi: window.buildDieZhangbi(nDie, nZhang),
+          jingtu,
+          tushi,
+          comment: boardStore.earlyEtf?.comment || ''
+        });
+        if (typeof window.closeEtfModal === 'function') window.closeEtfModal();
+      };
+
+      window.saveEtfComment = async function() {
+        const input = document.getElementById('etfCommentInput');
+        const comment = input ? input.value.trim() : '';
+        const existing = boardStore.earlyEtf || {};
+        await window.saveEarlyEtf({
+          shuliang: existing.shuliang || '',
+          die_count: existing.die_count ?? null,
+          zhang_count: existing.zhang_count ?? null,
+          die_zhangbi: existing.die_zhangbi || '',
+          jingtu: existing.jingtu || '',
+          tushi: existing.tushi || '',
+          comment
+        });
+        if (typeof window.closeEtfCommentModal === 'function') window.closeEtfCommentModal();
+      };
+
+      window.syncSectorEtfZhangNum = async function(zhangNum) {
+        await boardApi.syncSectorEtfZhangNum(zhangNum);
+      };
+
+      window.clearEtf = async function() {
+        if (!boardStore.currentDate) return;
+        if (!confirm('确定要清除所有ETF数据吗？')) return;
+        try {
+          const sb = window.getDashboardsSupabase();
+          await sb.from('early_etf_data').delete().eq('date', boardStore.currentDate);
+          boardStore.earlyEtf = null;
+          window.syncToLegacyStorage();
+          window.toast('✅ ETF数据已清除');
+        } catch (e) {
+          window.warnToast('清除失败: ' + (e.message || e));
+        }
+      };
+    } // end if (etfMounted)
   }
   window.installOverrides = installOverrides;
 

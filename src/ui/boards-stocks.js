@@ -182,21 +182,29 @@
             window.updateDateDisplay();
             
             // 渲染模式看板、记忘看板、排名看板、多板看板和题材思路（仅在需要时渲染）
+            // [RESILIENT-RENDER] 每个看板的渲染互相隔离：某一个看板渲染抛错（如 Vue 组件挂载
+            // 失败、容器被误销毁）绝不能再中断整条 renderList 链路、导致后续看板（尤其"竞价变化
+            // 看板"renderBidding）空白。逐个 try/catch，失败的看板仅记录日志，不影响其它看板。
             if (!skipOtherBoards) {
-                window.renderPattern();
-                window.renderBidding();
-                window.renderJiwang();
-                window.renderTagTitles();
-                window.renderRank();
-                if (!skipAuction) window.renderAuction();
+                const _safeRender = (label, fn) => {
+                    try { fn(); }
+                    catch (e) { if (window._dbgLog) window._dbgLog('[RENDER-LIST] ' + label + ' 渲染失败（已隔离）: ' + (e && e.message)); else console.warn('[RENDER-LIST] ' + label, e); }
+                };
+                // 竞价变化看板优先渲染，确保即使后面的看板（排名等）抛错也一定能显示
+                _safeRender('renderBidding', () => window.renderBidding && window.renderBidding());
+                _safeRender('renderPattern', () => window.renderPattern && window.renderPattern());
+                _safeRender('renderJiwang', () => window.renderJiwang && window.renderJiwang());
+                _safeRender('renderTagTitles', () => window.renderTagTitles && window.renderTagTitles());
+                _safeRender('renderRank', () => window.renderRank && window.renderRank());
+                if (!skipAuction) _safeRender('renderAuction', () => window.renderAuction && window.renderAuction());
                 // 热门股票看板也必须重新渲染，否则切换日期后会残留上一个日期的数据
                 // （所有日期切换函数都走 renderList，原先只渲染了 auction 分组）
-                window.renderHotStocks();
-                window.renderMulti();
-                window.renderHotspot();
-                window.renderEtf();
-                window.renderDuiban();
-                window.renderWeekendStats();
+                _safeRender('renderHotStocks', () => window.renderHotStocks && window.renderHotStocks());
+                _safeRender('renderMulti', () => window.renderMulti && window.renderMulti());
+                _safeRender('renderHotspot', () => window.renderHotspot && window.renderHotspot());
+                _safeRender('renderEtf', () => window.renderEtf && window.renderEtf());
+                _safeRender('renderDuiban', () => window.renderDuiban && window.renderDuiban());
+                _safeRender('renderWeekendStats', () => window.renderWeekendStats && window.renderWeekendStats());
             }
             
             const listEl = document.getElementById('stockList'),

@@ -10,8 +10,12 @@
   'use strict';
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
-  const Vue = window.Vue || (typeof Vue !== 'undefined' ? Vue : null);
-  if (!Vue) { console.warn('[AUCTION-VUE] Vue 未就绪'); return; }
+  // [TDZ-FIX] 原写法 `window.Vue || (typeof Vue !== 'undefined' ? Vue : null)` 在 window.Vue 不存在时
+  // 会去读取本行正在声明的 const Vue，触发 "Cannot access 'Vue' before initialization" 的 TDZ 错误，
+  // 导致 Vue 未就绪时整个 IIFE 抛错中断（虽然被浏览器吞掉，但挂载逻辑全部失效）。CDN 被墙/离线时
+  // window.Vue 通常为 undefined，这里直接用 window.Vue（全局 Vue 即 window.Vue），避免自引用 TDZ。
+  const Vue = window.Vue || null;
+  if (!Vue) { console.warn('[AUCTION-VUE] Vue 未就绪，保留原生 innerHTML 渲染'); return; }
 
   const store = window.auctionStore;
   if (!store) { console.warn('[AUCTION-VUE] window.auctionStore 未就绪'); return; }

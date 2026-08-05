@@ -8402,6 +8402,21 @@
     <script src="https://unpkg.com/vue@3.4.38/dist/vue.global.prod.js"></script>
     <script type="module" src="src/entry.js"></script>
 
+    <!-- 引导自检：若 entry.js 加载失败（如直接双击 html 文件走 file://，旧浏览器不支持 ES module，
+         或 CDN 被墙），window.checkPassword 不会存在，点击"解锁"会毫无反应。此处兜底给出可见提示。 -->
+    <script>
+        window.addEventListener('load', function () {
+            setTimeout(function () {
+                if (typeof window.checkPassword !== 'function') {
+                    var errEl = document.getElementById('pwdError');
+                    if (errEl && !errEl.textContent) {
+                        errEl.textContent = '❌ 应用脚本加载失败：请通过 http(s):// 方式访问本页面（不要直接双击 html 文件），或更换现代浏览器后重试';
+                    }
+                }
+            }, 3000);
+        });
+    </script>
+
     <!-- 被踢下线遮罩层 -->
     <div id="kickedOverlay" style="
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;

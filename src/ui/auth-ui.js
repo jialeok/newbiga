@@ -24,38 +24,46 @@
             const statusEl = document.getElementById('syncStatus');
             if (!input) { errEl.textContent = '请输入密码'; return; }
 
-            const hash = await window.sha256(input);
-            if (hash !== window.PASSWORD_HASH) {
-                errEl.textContent = '❌ 密码错误，请重试';
-                document.getElementById('pwdInput').value = '';
+            // 全程兜底：任何一步抛错都必须给出可见提示，杜绝"点了没反应"
+            try {
+                const hash = await window.sha256(input);
+                if (hash !== window.PASSWORD_HASH) {
+                    errEl.textContent = '❌ 密码错误，请重试';
+                    document.getElementById('pwdInput').value = '';
+                    return;
+                }
+
+                // 密码正确 — 生成新 token，覆盖云端，踢掉其他会话
+                errEl.textContent = '';
+                statusEl.innerHTML = '<span style="color:#60a5fa">🔄 正在登录并同步数据...</span>';
+                window._sessionToken = window.generateToken();
+                localStorage.setItem('unlocked', '1');
+                localStorage.setItem('sessionToken', window._sessionToken);
+                // 先写 token 踢掉旧会话（旧窗口收到后会停止推送）
+                await window.writeSessionToken(window._sessionToken);
+                // 等待旧窗口的防抖推送完成（防抖2秒 + 网络时间，留足余量）
+                statusEl.innerHTML = '<span style="color:#60a5fa">🔄 等待数据同步完成...</span>';
+                await new Promise(resolve => setTimeout(resolve, 3500));
+                // 拉取云端数据
+                await window.pullFromCloud();
+
+                // 隐藏密码遮罩
+                const overlay = document.getElementById('passwordOverlay');
+                overlay.style.transition = 'opacity 0.4s';
+                overlay.style.opacity = '0';
+                setTimeout(() => { overlay.style.display = 'none'; }, 400);
+
+                // 启动 session 轮询
+                window.startSessionPoll();
+
+                // 初始化应用
+                window.initApp();
+            } catch (e) {
+                console.error('checkPassword 失败:', e);
+                statusEl.innerHTML = '';
+                errEl.textContent = '❌ 登录失败：' + (e && e.message ? e.message : String(e));
                 return;
             }
-
-            // 密码正确 — 生成新 token，覆盖云端，踢掉其他会话
-            errEl.textContent = '';
-            statusEl.innerHTML = '<span style="color:#60a5fa">🔄 正在登录并同步数据...</span>';
-            window._sessionToken = window.generateToken();
-            localStorage.setItem('unlocked', '1');
-            localStorage.setItem('sessionToken', window._sessionToken);
-            // 先写 token 踢掉旧会话（旧窗口收到后会停止推送）
-            await window.writeSessionToken(window._sessionToken);
-            // 等待旧窗口的防抖推送完成（防抖2秒 + 网络时间，留足余量）
-            statusEl.innerHTML = '<span style="color:#60a5fa">🔄 等待数据同步完成...</span>';
-            await new Promise(resolve => setTimeout(resolve, 3500));
-            // 拉取云端数据
-            await window.pullFromCloud();
-
-            // 隐藏密码遮罩
-            const overlay = document.getElementById('passwordOverlay');
-            overlay.style.transition = 'opacity 0.4s';
-            overlay.style.opacity = '0';
-            setTimeout(() => { overlay.style.display = 'none'; }, 400);
-
-            // 启动 session 轮询
-            window.startSessionPoll();
-
-            // 初始化应用
-            window.initApp();
 
             // 后台加载 daily_highlights 缓存（启用后 renderAuction 可推送高光到表，供刷新时秒级加载）
             window.pullDailyHighlights().then(function() { window.renderAuction(); }).catch(function(e) { window._dbgLog('[AUCTION-ERR] daily_highlights 加载失败 ' + (e && e.message || e)); });

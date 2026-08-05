@@ -491,6 +491,14 @@
             const placeholderEl = document.getElementById('biddingPlaceholder');
             const toggleBtn = document.getElementById('biddingToggleBtn');
 
+            // [NULL-GUARD] 容器不存在（被 Vue 组件接管或 DOM 结构异常）时绝不写 innerHTML，
+            // 否则会抛 "Cannot set properties of null"，并连带让调用方（renderList / 初始链路）
+            // 误以为整条渲染失败了。容器缺失时记录日志直接返回，交由对应的 Vue 刷新路径处理。
+            if (!contentEl) {
+                if (window._dbgLog) window._dbgLog('[BIDDING-RENDER] #biddingContent 不存在，跳过原生渲染（可能已交给 Vue 路径）');
+                return;
+            }
+
             if (!biddingData || biddingData.length === 0) {
                 window._dbgLog('[BIDDING-RENDER] ' + window.currentDate + ' 无有效数据，回退到默认模板');
                 biddingData = window.getDefaultBiddingData();
@@ -624,9 +632,9 @@
             // 显示展开/收起按钮，保持当前状态
             toggleBtn.style.display = 'flex';
             const boardEl = document.getElementById('biddingBoard');
-            if (!boardEl.classList.contains('minimized')) {
+            if (boardEl && !boardEl.classList.contains('minimized')) {
                 toggleBtn.textContent = '▲';
-            } else {
+            } else if (boardEl) {
                 toggleBtn.textContent = '▼';
             }
 

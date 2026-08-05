@@ -12,7 +12,8 @@
     'use strict';
     if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
-    const Vue = window.Vue || (typeof Vue !== 'undefined' ? Vue : null);
+    // [TDZ-FIX] 避免 window.Vue 不存在时读取正在声明的 const Vue 触发 TDZ
+    const Vue = window.Vue || null;
     window.auctionStore = window.auctionStore;
     if (!Vue || !window.auctionStore) {
         console.warn('[AUCTION-COMPOSABLES] Vue 或 window.auctionStore 未就绪，跳过初始化');

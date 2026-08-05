@@ -345,4 +345,114 @@ ui/  可以依赖 →  logic/  可以依赖 →  data/
   - `app-core.js:1004` 多余 `}` 导致 `rollbackAuctionData` 函数提前关闭，后续代码溢出到模块顶层引发语法错误，已删除
   - 修复：每处 `window._domXxx(arg1, arg2;` → `window._domXxx(arg1, arg2);`
 
+- **登录按钮"无反应、无提示" Bug 修复（非安全上下文 `crypto.subtle` 缺失）**：
+  - **根因**：密码验证 `sha256()` 直接调用 `crypto.subtle.digest`，而 `crypto.subtle` 仅在安全上下文（HTTPS / localhost / file://）可用。通过 `http://局域网IP` 访问（手机连电脑本地服务、HTTP 部署等）时 `crypto.subtle` 为 `undefined`，`sha256()` 抛 `TypeError`，`checkPassword()` 是 async 函数→未处理的 Promise 拒绝→界面无任何反馈，登录页卡死、点"解锁"毫无反应。
+  - **修复（按三层架构）**：
+    - `data/supabase-client.js`（数据层，纯计算）：`sha256()` 增加纯 JS SHA-256 兜底实现（`_sha256PureJs`，FIPS 180-4），`window.crypto.subtle` 不可用时走兜底，保证 `http://` 访问也能正确哈希
+    - `ui/auth-ui.js`（展示层）：`checkPassword()` 全程包 `try/catch`，任何步骤抛错都在 `pwdError` 显示可见错误（如 `❌ 登录失败：xxx`），杜绝"点了没反应"
+    - `index.html`（UI 引导胶水）：在 `<script type="module">` 之后新增引导自检脚本，`entry.js` 加载失败（`file://` 直接双击打开、旧浏览器不支持 ES module、CDN 被墙）时 3 秒后在 `pwdError` 提示改用 `http(s)://` 方式访问
+  - **验证**（真实 Chromium 复现）：`http://192.168.x.x:8899` 非安全上下文下，`isSecureContext=false`、`crypto.subtle=undefined`，修复前点解锁遮罩不消失/无提示，修复后 `sha256('biga8450')=717eed5d...`（与 `PASSWORD_HASH` 一致）→ 成功解锁（`unlocked=1`、遮罩隐藏）；错误密码显示 `❌ 密码错误，请重试`
+
+- **竞价看板显示旧日期 / 未来日期继承旧数据（启动 `currentDate` 卡在 `lastEditedDate`）— Issue #1a**：
+  - **根因**：`app-core.js` 模块顶层初始化、`initApp()`（密码验证后）、`_appInit()`（DOMContentLoaded 后）三处各自从 `localStorage.lastEditedDate_v42` 读取并 `setCurrentDate` 恢复"上次编辑日期"，仅有 `>= '2025-01-01'` 校验、无"是否等于今天"判断。用户上次在 8/5 编辑后，每次打开都落到 8/5（而非今天），竞价看板显示 8/5 数据；向前翻到未来交易日时无数据而"继承" 8/5 显示 → 表现为"未来日期也继承 8/5"。
+  - **修复（逻辑层/状态处理，符合规范）**：新增 `_computeBeijingToday()`（UTC+8，按 `getTimezoneOffset` 偏移、不依赖浏览器时区并挂到 `window` 复用），启动统一以"北京今天"为准——仅当 `lastEditedDate === 今天` 才沿用，否则一律 `setCurrentDate(今天)`。三处读取点（`initApp`、`app-core.js` 顶层、`_appInit`）全部改为同一规则，杜绝任一处把日期跳回旧值。
+  - **涉及文件**：`src/logic/app-core.js`（`_computeBeijingToday` + `initApp` + 顶层初始化）、`src/ui/app-init.js`（`_appInit`）
+  - **验证**：Node 单测复刻该决策逻辑，在 `TZ=UTC` 下对 今天/昨天(stale)/空/null/旧日期/未来/畸形 8 种输入，`currentDate` 均正确落到"北京今天"；逻辑层不触碰 DOM/网络，符合规范。
+
+- **worker 今日抓不到数据 / 情绪看板空 — Issue #1b（实为查看侧问题，worker 源码正确）**：
+  - **核查结论**：`workers/bidding-board-worker-a/logic/bidding-workflow.js` 与 `bidding-board-worker-b/logic/emotion-workflow.js` 均以 `beijingToday()`（`_shared-source/date-utils.js`，UTC+8 偏移、时区无关）作为写入 `date` 主键，并以 `isTradingDay(env)` 闸门判断；`localIsTradingDay('2026-08-06')` → 周四且非节假日 → `true`，worker 今日会正常抓取落库。故"worker 抓不到数据/情绪空"的根因是 **Issue #1a 的查看侧旧日期**（打开停在未写的旧日期、看似"没数据"），非 worker 逻辑缺陷。
+  - **动作**：按用户要求重新执行 `workers/_bundle-workers.ps1` 重新生成 `workers/_bundled/*.js`（时间戳已更新为今天），保证手动部署文件与源一致；worker 源码无需改动。
+
+- **早盘竞价 toggle 失效（竞昨/平行/环比 无蓝色左标、无按条件排序）— Issue #2**：
+  - **根因**：本环境 Vue 未挂载（`c2Vue=false`），竞价看板走 innerHTML 渲染路径。toggle 回调 `_refreshAuctionOnToggle` / `_refreshAuctionPage2OnToggle` 原本只做"同步 store 排序状态 + 切换容器高亮 class"，**未重新渲染行**，导致点击开关后行不更新、无蓝色 `jing-yest-match` 标记、也无条件排序。
+  - **修复（ui 层，交互→重渲染）**：在两个回调末尾追加对活跃 innerHTML 渲染路径的调用——`_refreshAuctionOnToggle` 追加 `window.renderAuction(dataSource)`，`_refreshAuctionPage2OnToggle` 追加 `window.renderAuctionPage2(dataSource)`，使开关真正重算并渲染行（蓝色左标由 `index.html` 的 `.auction-content.jing-yest-enabled .auction-item.jing-yest-match` 规则负责）。
+  - **涉及文件**：`src/ui/auction-pages.js`（`_refreshAuctionOnToggle`、`_refreshAuctionPage2OnToggle`）
+  - **验证**：`node --check` 通过；竞价页 1/2 切换开关逻辑闭环。实时数据下的 `matchCount>0` 依赖云端当日竞价数据加载，待云数据就绪后生效。
+
+- **周六/周日独立模板 + 周/月统计 UI — Issue #3（核查结论：功能已完整存在，由 Issue#1a 启用）**：
+  - **核查结论**：当前 `index.html` 与 `src/ui/boards-stats.js` 已完整包含独立的周六（`saturday-content`=周统计：盈亏/出手/总计/ETF/多板/上榜/记录/曲线/总结心得）与周日（`sunday-content`=周末总结：本周回顾/经验总结/下周计划）模板，由 `body.saturday-mode`/`sunday-mode` 切换；另有独立的 `monthly-stats-board`（本月统计）与 `本周统计/上周统计/本月统计/返回当前` 导航按钮。`renderWeekendStats()` 在 `renderList`（每次切日期都调用）中触发：周六→`saturday-mode`+`renderWeeklyStats()`，周日→`sunday-mode`+`renderWeekendSummary()`；`body.weekend-mode .trading-day-element{display:none}` 隐藏交易日看板。所有 helper（`isWeekend`/`getWeekTradingDays`/`renderWeeklyStats`/`renderWeekendSummary`/`renderMonthlyStats`/`goBackToCurrent`）均已定义并由 `entry.js` 聚合挂到 `window`。
+  - **用户侧表现的根因**：启动卡在旧交易日（Issue#1a），而"上/下交易日"导航跳过周末，用户从未真正落到周六/周日，故以为周末模板"丢失/一样"。**Issue#1a 的日期修复是启用该项的关键**：打开即落今天，今天若为周末直接显示；用日期选择器或"本周统计"按钮切到周末即见独立模板。
+  - **动作**：无需改动周末模板代码；仅确认链路完整。前端改动（`app-core.js` / `auction-pages.js`）需随 `index.html`+`src/` 一起重新提供/部署，用户手动部署时同步最新前端。
+
+- **竞价变化看板白板 + 后台按钮 `Cannot set properties of null (setting 'innerHTML')` — Issue #4 / Issue #5（Vue 组件挂载失败未降级，渲染链路不隔离）**：
+  - **环境**：`ARCHITECTURE.md` Issue #2 已确认本机为 **Vue 未挂载（c2Vue=false）**——Vue 库能加载，但组件 `createApp(...).mount()` 失败，应走原生 innerHTML 兜底路径。两类故障同源：Vue 接管容器后挂载失败，却既没恢复原容器、也没隔离异常，导致后续渲染整条中断。
+  - **Issue #4（按钮 innerHTML null）根因**：`src/ui/components/rank-vue.js` 的 `mountRankBoard()` 先 `el.innerHTML = '<div id="rank-vue-root">'`（销毁原生 `#rankContent`），再 `createApp(RankBoard).mount()`；若挂载抛错（组件运行时错误），原 `window.renderRank`（原生 innerHTML 版）**未被覆盖**，于是 `#rankContent` 已不存在、`renderRank` 仍写 `rankContent.innerHTML` → `Cannot set properties of null (setting 'innerHTML')`。早盘竞价 tab 后台的「获取涨幅 / 猫抓数据」等按钮走 `renderList`→`renderRank`，故点击即报此错，并连带 `renderList` 整条中断、"点了没数据"。
+  - **Issue #4 修复（ui 层，符合规范）**：
+    - `src/ui/components/rank-vue.js` `mountRankBoard()`：仅在 `window.Vue.createApp` 真正可用时接管；`try/catch` 包裹挂载，**失败时还原 `el.innerHTML = '<div class="rank-content" id="rankContent">'`**，且 `window.renderRank` 只在挂载**成功**后才覆盖。
+    - `src/ui/boards-rank.js` `renderRank()`：新增 `[NULL-GUARD]`，`#rankContent` 不存在时委托 `window.vueRankBoardRefresh()`（已被 Vue 接管的情形），绝不再对 null 写 innerHTML。
+  - **Issue #5（竞价变化看板白板）根因**：渲染链路 `window.renderList`（原生版 `boards-stocks.js` 与 Vue 接管版 `boards-vue.js:715`）把 `renderPattern / renderBidding / renderRank / ...` 串成顺序调用且**无隔离**。任一看板抛错（典型即 Vue 接管后 `renderPattern` 或 `updateStockStats`/`getTodayData` 抛错）会中断整条链路，使排在后面的 `renderBidding`（竞价变化看板）被一起跳过→表头与「要盯项目」全无、只白板。初始加载链路（`main.js:76`、`app-init.js:206`）同样串调用，故白板在打开即出现。
+  - **Issue #5 修复（ui 层，渲染隔离，符合规范）**：
+    - `src/ui/boards-stocks.js` `renderList()`：子看板逐个 `_safeRender` 隔离，且**把 `renderBidding` 提到最前**优先渲染，确保即使后续看板（排名等）抛错也一定能显示。
+    - `src/ui/components/boards-vue.js` `window.renderList` 覆盖：同样隔离 `updateStockStats`/`updateDateDisplay` 与每个子看板，`renderBidding` 优先。
+    - `src/main.js:76` 与 `src/ui/app-init.js:206`（事件总线全量刷新）初始/全量链路同样改为逐个 `_safeInit`/`_safeAll` 隔离，`renderBidding` 必渲染。
+    - `src/ui/boards-bidding.js` `renderBidding()`：新增 `[NULL-GUARD]`，`#biddingContent` 缺失时记录日志直接返回（交由 Vue 路径），不再写 null；`boardEl` 判空避免收尾抛错。
+  - **配套防御（entry.js 导入期 TDZ）**：`src/ui/auction-vue-mount.js`、`src/stores/auctionStore.js`、`src/ui/components/auction-components.js`、`src/ui/composables/auction-composables.js`、`src/ui/dashboards.js` 原写法 `const Vue = window.Vue || (typeof Vue !== 'undefined' ? Vue : null)` 在 `window.Vue` 缺失时会读取正在声明的 `const Vue` 触发 **TDZ `Cannot access 'Vue' before initialization`**；其中 `dashboards.js` 无 guard 直接 `const {createApp,...} = Vue` 抛 `Vue is not defined`，会**中断整个 `entry.js` 模块图**、所有 `window.renderXxx` 未能挂载。统一改为 `const Vue = window.Vue || null;` 并在 `dashboards.js` 顶部加 `if (typeof Vue === 'undefined') return;` 提前降级，保证 Vue 缺失时也能完整走原生 innerHTML 路径。
+  - **验证**：`node` + `jsdom` 复刻真实 `index.html` 与 `entry.js`，强制 Vue 不可用路径：
+    - `renderList` 不再抛 innerHTML null；`renderBidding`/`renderRank`/各看板均 OK；`#biddingContent` 输出含 `<table>` 与「要盯项目」。
+    - 隔离回归：手动令 `renderPattern` 与 `renderRank` 抛错后再调 `renderList`，竞价变化看板仍 PASS 渲染（表头 + 要盯项目齐全）。
+  - **涉及文件（ui 层为主，未引入跨层）**：`src/ui/components/rank-vue.js`、`src/ui/boards-rank.js`、`src/ui/boards-stocks.js`、`src/ui/components/boards-vue.js`、`src/ui/boards-bidding.js`、`src/main.js`、`src/ui/app-init.js`、`src/ui/auction-vue-mount.js`、`src/stores/auctionStore.js`、`src/ui/components/auction-components.js`、`src/ui/composables/auction-composables.js`、`src/ui/dashboards.js`。
+
+- **首页顶部看板「只剩一条/三条线、UI 样式消失」— Issue #6（Vue 接管但挂载失败时未回退原生 innerHTML，与 Issue#4/#5 同源）**：
+  - **环境**：仍为本机 `c2Vue=false`（ARCHITECTURE.md Issue #2）。竞价/排名等看板已在 Issue#4/#5 修好降级，但**另有四个看板仍沿用旧的「先清空容器、再 mount、不兜底」写法**，挂载失败（或本机根本不挂载）后容器被清空成空白框架，只剩外框的 CSS 线：
+    - 首页顶部 **模式看板（#patternBoard）**：只剩一条紫色线（`#8b5cf6` 边框 + 紫色 `box-shadow`，`pattern-board.minimized` 默认 `pattern-content{display:none}` → 原生渲染被清掉后只剩紫色外框）。
+    - **题材思路看板（#hotspotBoard）**、早盘竞价下方的 **最近多板看板（.duiban-board）**、**板块 ETF 表现看板（.etf-board）**：各自只剩三条线（外框 + 分隔线）。
+  - **根因**：两个「Vue 接管」模块在 `c2Vue=false` 下挂载失败却未恢复容器：
+    - `src/ui/components/boards-vue.js` `mountStocksBoards()` 接管 **stocks / hotspot / pattern** 三块，原代码 `if (el) createApp(X).mount(el);` 无 `try/catch`，且无条件覆盖 `window.renderList/renderHotspot/renderPattern` 成「只调 Vue 刷新、不重渲染」的版本——挂载一抛错，原生 innerHTML 已被清空、又没人回填 → 只剩空框架。
+    - `src/ui/dashboards.js` `mountBoards()` 接管 **最近多板（duiban）/ 早盘板块ETF（etf）**，原代码 `el.innerHTML='<div id="xxx-vue-root">' + createApp(...).mount()` 同样无 `try/catch`，`installOverrides()` 无条件把 `renderMulti/renderDuiban/renderEtf` 覆盖成「只调 `loadRecentMulti/loadEarlyEtf` 的 Vue 刷新版」。
+  - **修复（ui 层，符合规范，与 rank-vue.js 同源做法）**：
+    - `src/ui/components/boards-vue.js` `mountStocksBoards()`：挂载前**先保存各容器原始 `innerHTML`**；每块 `try/catch` 包裹 `createApp(X).mount()`，失败则 **`el.innerHTML = 原内容`** 还原 + 置 `stockOk/hotspotOk/patternOk=false` 并 `_dbgLog` 记录；**仅当某块挂载成功才覆盖对应的 `window.renderXxx`**，失败则保留原生 innerHTML 渲染函数（stocks 那份保留 Issue#5 的 `_safe` 隔离链、`renderBidding` 优先）。
+    - `src/ui/dashboards.js` `mountBoards()` + `installOverrides()`：模块级 `let duibanMounted/etfMounted=false`；每块 `try/catch`，失败还原 `innerHTML`；覆盖 `renderMulti/renderDuiban/renderEtf` 前**先捕获原生函数 `_origRenderMulti/_origRenderEtf`**，覆盖后的函数判断 `duibanMounted/etfMounted`——挂载成功走 Vue 刷新，失败则**回退 `_origRenderMulti/_origRenderEtf` 原生 innerHTML 渲染**，绝不留下空框架。
+  - **验证**：`node` + `jsdom` 复刻真实 `index.html`+`entry.js`，强制 Vue 不可用（`FAIL_MOUNT=1` 模拟 `c2Vue=false` 挂载抛错）：`[BOARD-VUE] stock/hotspot/pattern 挂载失败，回退原生渲染` 与 `[DASHBOARDS] duiban/etf 挂载失败，回退原生渲染` 均触发；再次调用 `renderPattern/renderMulti/renderEtf` 后 `#patternContent` / `#multiContent` / `#etfTableBody` 均产出非空 innerHTML（有真实内容，非空白框架）。`FAIL_MOUNT=0`（Vue 正常挂载）路径亦无回归：Vue 接管成功后容器被 `xxx-vue-root` 取代、由真实浏览器渲染，统计与渲染链路不中断。
+  - **涉及文件（ui 层，未引入跨层）**：`src/ui/components/boards-vue.js`、`src/ui/dashboards.js`。
+
+- **周末统计看板（周六）全部显示 0、无统计数据 — Issue #7（全对象语义被误覆盖，渲染链路中断抛错）**：
+  - **现象**：点击「本周统计」或在周六打开，统计看板所有数字（出手/空仓次数、最近多板/题材/ETF 记录数、胜率、盈亏、成交天数）全为 0，未做任何聚合。
+  - **根因**：`src/ui/boards-stats.js` `renderWeeklyStats()` 开头有一行 `window.allData = getStocksData();`。本环境 `window.allData` 是**全对象** `{stocks, jiwang, rank, multi, hotspot, pattern, bidding, ...}`（由 `loadAllData()` 构建，且带 500ms 缓存，`getJiwangData()/getRankData()/getEtfData()` 都依赖 `window.allData.jiwang/.rank/.etf`）。而 `getStocksData()` 只返回**「按日期索引的股票映射」**（`window._stocksMemCache`，即旧单文件版 `allData[dateStr]` 语义）。这一行把全对象整体覆盖成「仅股票」映射，导致后续 `const dayJiwang = window.getJiwangData()[dateStr]`（`getJiwangData()` → `loadAllData().jiwang` → 经 500ms 缓存返回已被覆盖成股票映射的 `window.allData`，其 `.jiwang` 为 `undefined`）→ `undefined[dateStr]` **抛 `TypeError`**，`renderWeeklyStats` 整段中断，所有 `textContent` 停留在初始 0。每日循环里 `const dayData = window.allData[dateStr]` 取股票数据那一行也因同样误覆盖而拿不到正确结构（`window.allData` 已非全对象）。
+  - **修复（ui 层，读取侧，符合规范）**：不再用 `window.allData = getStocksData()` 覆盖全对象。改为局部变量 `const _stocksData = window.getStocksData() || {};`，并把取股票数据的 `const dayData = window.allData[dateStr] || [];` 改为 `const dayData = _stocksData[dateStr] || [];`。`window.allData` 保持完整对象，`getJiwangData()/getRankData()/getEtfData()` 经 `loadAllData` 缓存返回正确的 `.jiwang/.rank/.etf`，聚合恢复正常；`renderTotalStats()`/`renderWeeklySummary()` 等下游 helper 也因 `window.allData` 完整而正确。
+  - **验证**：`node` + `jsdom` 复刻真实 `index.html`+`entry.js`，种子 2026-08-03~07 一周的 `window._jiwangMemCache`（含 `jielun/chushou/stats`）与 `window._stocksMemCache`、以及 `localStorage.duibanData/etfData`，设 `currentDate='2026-08-08'`（周六）后调用 `renderWeekendStats()/renderWeeklyStats()`：修复前抛 `Cannot read properties of undefined (reading '2026-08-03')` 中断、全 0；修复后 `#weekendEmptyCount=2 / #weekendChushouCount=3 / #weekendTradingDays=5 / #weekendDuibanCount=5 / #weekendTopicCount=4 / #weekendEtfCount=3 / #weekendEmptyWinRate=50.0% / #weekendChushouWinRate=66.7% / #weekendTotalProfit=1500`，均为正确聚合值（`drawProfitChart` 的 `getContext` 报错仅为 jsdom 无 canvas 实现，发生于所有统计写入之后、真实浏览器不受影响）。
+  - **涉及文件（ui 层，读取侧，未引入跨层）**：`src/ui/boards-stats.js`（`renderWeeklyStats`，2 处：删除覆盖全对象行 + 改用 `_stocksData` 局部变量）。
+
+- **模式看板不展开/四个看板仍是一条线/统计看板缺数据/早盘竞价「猫抓」手动获取提示「缺少代码映射」— Issue #8（回退验证 + 两处修复）**：
+  - **环境**：本机 `c2Vue=false`。所有 Vue 看板组件在真实浏览器里**挂载失败**——模板中引用的 `window.xxx`/`window.handleSave` 被 Vue 解析为 `_ctx.window`（实例属性）而非全局 `window`，而 `app.config.globalProperties.window` 未设置 → render 抛 `Cannot read properties of undefined (reading 'handleSave')` → `createApp().mount()` 失败。**结论：真实浏览器走的是原生 innerHTML 兜底路径**（Issue #6 的 `try/catch` 回退机制），四个看板的内容由 `boards-*.js` 原生渲染，`dashboards.js` 的 `installOverrides()` 因 `duibanMounted/etfMounted=false` 不覆盖原生函数。
+  - **A. 模式看板默认不展开（「只剩一条线」）**：
+    - 根因：`renderPattern()` 原默认给 `boardEl` 加 `minimized` 类并设 `▼`（首页 `#patternBoard` 本身也带 `minimized` 类），原生模式看板渲染完立刻收起只剩标题栏；Vue 版 `PatternBoard` 默认 `expanded=ref(false)` 同样收起。
+    - 修复（ui 层，未跨层）：
+      - `src/ui/boards-pattern.js` `renderPattern()`：改为**默认展开**——保留「展开/收起」按钮（`display:flex` + `▲`），并 `boardEl.classList.remove('minimized')`。`togglePatternExpand`（`boards-bidding.js:466`）不变，仍可正常折叠/展开。
+      - `src/ui/components/boards-vue.js` `PatternBoard`：`const expanded = ref(true);`（仅当 Vue 路径生效时起作用，与 Native 行为保持一致）。
+  - **B. 四个看板「仍是一条线、没变化」**：
+    - 诊断：四个看板（模式/题材/最近多板/ETF）在原生兜底路径下**均能产生真实内容**（复现脚本 `#patternContent`/`#hotspotContent`/`#duibanTableBody`/`#etfTableBody`/`#multiContent` 均非空）。「没变化」的根因是**浏览器缓存**：本项目无构建步骤，`src/entry.js`(module) 与 `src/*.js` 被浏览器直接加载，编辑 `src/` 后必须**硬刷新（Ctrl+Shift+R）**才生效；上次修复未生效很可能是未硬刷。本次对模式看板默认展开后，题材/多板/ETF 看板无需额外改动（Issue #6 兜底已确保有内容）。
+    - 验证：复现脚本强制 Vue 不可用，四看板全部 PASS（`#duibanTableBody` 含「56」、`#etfTableBody` 含「48」、`#multiContent` 含「股票A」）；模式看板渲染后 `minimized=false`（已展开），点 `togglePatternExpand` 可正常折叠/恢复。
+  - **C. 周末统计看板「很多数据没有了」**：
+    - 诊断：经复现脚本验证，当前 `src/ui/dashboards.js` `installOverrides()` 已用 `duibanMounted/etfMounted` 两个开关**正确门控**——Vue 挂载失败（本机必失败）时**不覆盖** `getTodayDuiban`/`getEtfData`/`renderDuiban`/`renderEtf`，回退到 `boards-duiban.js`/`boards-etf.js` 的原生 localStorage 读取 + 历史聚合；叠加 Issue #7 已修好的 `renderWeeklyStats` 全对象误覆盖，周末统计（出手/空仓/胜率/盈亏/成交天数、多板/题材/ETF 历史）计算正确。**无新增回归，无需改代码**。该现象同样归因为浏览器缓存（旧版有问题的 `installOverrides` 覆盖残留）。
+    - 验证：复现脚本置 `currentDate='2026-08-08'`（周六），`#weekendEmptyCount=2 / #weekendChushouCount=3 / #weekendTradingDays=5 / #weekendDuibanCount=5 / #weekendTopicCount=4 / #weekendEtfCount=3 / #weekendEmptyWinRate=50.0% / #weekendChushouWinRate=66.7% / #weekendTotalProfit=1500`，均为正确聚合。
+  - **D. 早盘竞价「猫抓」手动获取提示「缺少代码映射」**：
+    - 根因：`src/logic/app-core.js` `fetchAuctionFromNumcat()`（及 `fillTopicsFromNumcat()`）开头取 `const scMap = window._scMapCache || {}`；若启动期 `loadCloudStockCodeMap()` 因登录时序/网络抖动失败或竞态，`_scMapCache` 一直为空 → 收集不到代码 → `allCodesSet.size===0` → 直接报「缺少代码映射」且**未尝试补救**。
+    - 修复（logic 层，调用 data 层 `loadCloudStockCodeMap`，符合分层规范）：代码映射为空时**先按需从云端重新拉取一次**再决定是否报错；并给出更清晰的提示（区分「列表有代码但映射缺失」与「列表无代码且映射也空」）。
+      ```js
+      let scMap = window._scMapCache || {};
+      if (Object.keys(scMap).length === 0 && typeof window.loadCloudStockCodeMap === 'function') {
+          try { await window.loadCloudStockCodeMap(); }
+          catch (e) { window._dbgLog('[NUMCAT-FIX] 按需加载代码映射失败: ' + (e && e.message)); }
+          scMap = window._scMapCache || {};
+      }
+      // ...收集代码后若仍为空，按是否有股票代码给出区分提示...
+      ```
+    - 验证：复现脚本三种情况——
+      - [4a] 映射存在 → 直接「正在请求猫抓接口（1 只股票，三天；今日同时补竞价量+涨幅）」；
+      - [4b] 映射为空 → 触发 `loadCloudStockCodeMap` 按需重新拉取后继续「正在请求…」；
+      - [4c] 云端无映射 → 清晰提示「❌ 没有可补全的股票（股票列表无代码，且代码映射为空；请先导入股票代码映射）」。
+  - **复现手段（已清理）**：`repro-real-vue.mjs` 用 `jsdom + 真实 vue.global.js + Proxy 原型全局` 复刻 `index.html`+`entry.js`，比上次的 `FAIL_MOUNT=1` 桩更接近真实浏览器（上次桩是模拟，本次是真实 Vue 构建挂载行为）。验证完成已从仓库根删除。
+  - **涉及文件**：`src/ui/boards-pattern.js`（默认展开）、`src/ui/components/boards-vue.js`（`PatternBoard` 默认 `ref(true)`）、`src/logic/app-core.js`（`fetchAuctionFromNumcat`/`fillTopicsFromNumcat` 按需重载代码映射，logic→data 分层）。`src/ui/dashboards.js`（Issue #6 门控保留，本次未改动）与 `src/ui/boards-stats.js`（Issue #7 修复保留，本次未改动）经复验无回归。
+
+- **看板仍只剩边框线（Vue 3 生产构建吞错导致兜底失效）— Issue #9（VUE-PROD-SWALLOW 修复）**：
+  - **环境**：本机 `c2Vue=false`。Vue 3 CDN 使用生产构建 `vue.global.prod.js`。
+  - **根因**：Vue 3 **生产构建**中，组件 render 函数抛错时 `callWithErrorHandling` 只调 `console.error` 记录、**不 re-throw**。因此 Issue #6/#8 加的 `try { createApp().mount() } catch` **永远抓不到错误**——mount 看似"成功"（无异常），但容器实际为空（Vue 渲染失败只留注释/空文本）。随后 `xxxOk = true` 被错误置位，`window.renderPattern`/`renderHotspot`/`renderDuiban`/`renderEtf`/`renderRank` 被覆盖为空 Vue stub（`vueXxxBoardRefresh` 只重置编辑状态不渲染 DOM），原生渲染函数被切断 → 看板只剩 CSS 边框线。
+  - **修复（ui 层，未跨层）**：在 `createApp().mount()` 之后**检查容器是否真的有元素子节点**（`el.children.length > 0`），空则视为失败：还原 `innerHTML` 并不接管 render 函数。
+    - `src/ui/components/boards-vue.js` `mountStocksBoards()`：stock/hotspot/pattern 三个挂载点均加 `_hasContent(el)` 后置检查。
+    - `src/ui/dashboards.js` `mountBoards()`：duiban/etf 两个挂载点均加 `el.children.length > 0` 后置检查。
+    - `src/ui/components/rank-vue.js` `mountRankBoard()`：加 `el.children.length === 0` 后置检查，空则 throw 进入 catch 还原原生容器。
+  - **验证**：HTTP 服务器 (`py -m http.server`) 验证所有文件可访问；代码模式检查确认 `_hasContent`/`children.length`/`VUE-PROD-SWALLOW` 标记均在三个文件中。修复后 Vue mount 产生空内容时 `xxxOk=false`/`xxxMounted=false`，原生 `renderPattern`/`renderDuiban`/`renderEtf`/`renderMulti`/`renderHotspot`/`renderRank` 全部保留，由 `main.js`/`app-init.js` 在数据加载后调用，看板内容正常渲染。
+  - **涉及文件**：`src/ui/components/boards-vue.js`、`src/ui/dashboards.js`、`src/ui/components/rank-vue.js`。
+
+
 

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * rank-vue.js
  * 昨日最大成交额看板 Vue 3 组件化
  * - 复用现有数据层 getRankData / saveData
@@ -531,26 +531,47 @@
   };
 
   function mountRankBoard() {
+    // [GRACE-DEGRADE] 仅当 Vue 真正可用时才接管原生容器；否则保留原生 #rankContent 与
+    // renderRank，走 innerHTML 回退路径（与 auction 看板一致）。否则一旦 Vue 加载失败
+    // （CDN 被墙/离线），mount 会抛错且 #rankContent 已被销毁，导致 renderRank 对 null 写
+    // innerHTML 崩溃（"Cannot set properties of null"），并连带 renderList 整条链路中断。
+    if (!window.Vue || typeof window.Vue.createApp !== 'function') {
+      if (window._dbgLog) window._dbgLog('[RANK-VUE] Vue 未就绪，保留原生 innerHTML 渲染');
+      return;
+    }
     const el = document.querySelector('.rank-board.trading-day-element');
     if (!el) return;
     // 移除原生 ondblclick 避免冲突
     el.removeAttribute('ondblclick');
-    el.innerHTML = '<div id="rank-vue-root"></div>';
-    createApp(RankBoard).mount('#rank-vue-root');
+    try {
+      const app = window.Vue.createApp(RankBoard);
+      el.innerHTML = '<div id="rank-vue-root"></div>';
+      app.mount('#rank-vue-root');
 
-    // 覆盖原生 renderRank：仅触发 Vue 刷新
-    window.renderRank = function () {
-      if (typeof window.vueRankBoardRefresh === 'function') {
-        window.vueRankBoardRefresh();
+      // [VUE-PROD-SWALLOW] Vue 3 生产构建 render 抛错只 console.error 不 re-throw。
+      // 挂载后检查容器是否有内容；空则视为失败，不接管 renderRank。
+      if (el.children.length === 0) {
+        throw new Error('Vue mount produced empty content');
       }
-    };
 
-    // 覆盖旧编辑入口
-    window.openRankEdit = function () {
-      if (typeof window.vueRankBoardOpenEdit === 'function') {
-        window.vueRankBoardOpenEdit();
-      }
-    };
+      // 覆盖原生 renderRank：仅触发 Vue 刷新
+      window.renderRank = function () {
+        if (typeof window.vueRankBoardRefresh === 'function') {
+          window.vueRankBoardRefresh();
+        }
+      };
+
+      // 覆盖旧编辑入口
+      window.openRankEdit = function () {
+        if (typeof window.vueRankBoardOpenEdit === 'function') {
+          window.vueRankBoardOpenEdit();
+        }
+      };
+    } catch (e) {
+      if (window._dbgLog) window._dbgLog('[RANK-VUE] 排名看板 Vue 挂载失败/空内容，回退原生渲染：' + (e && e.message));
+      // 还原原生容器，确保 renderRank 仍可用（避免后续 innerHTML 写 null）
+      el.innerHTML = '<div class="rank-content" id="rankContent"></div>';
+    }
   }
   window.mountRankBoard = mountRankBoard;
 

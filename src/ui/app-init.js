@@ -43,10 +43,15 @@
             // 加载第四页数据
             window.loadCopiedStocks();
 
-            // 获取最后编辑的日期，如果有则跳转
+            // [ISSUE#1 修复] 启动默认今天：不再无条件跳回 lastEditedDate。
+            // 仅当 lastEditedDate 恰为今天时才沿用；否则保持启动时已设好的"今天"，
+            // 不跳回旧日期（避免打开后停在 8/5 并向前串数据）。
             const lastEditedDate = localStorage.getItem('lastEditedDate_' + window.DATA_VERSION);
-            window._dbgLog('_appInit: 启动时 window.currentDate=' + window.currentDate + ', localStorage 记录的 lastEditedDate=' + lastEditedDate);
-            if (lastEditedDate && lastEditedDate >= '2025-01-01') {
+            const _bt = (typeof window._computeBeijingToday === 'function')
+                ? window._computeBeijingToday()
+                : (function () { const n = new Date(); const y = n.getFullYear(); const m = String(n.getMonth() + 1).padStart(2, '0'); const d = String(n.getDate()).padStart(2, '0'); return `${y}-${m}-${d}`; })();
+            window._dbgLog('_appInit: 启动时 window.currentDate=' + window.currentDate + ', localStorage 记录的 lastEditedDate=' + lastEditedDate + ', 今天(北京)=' + _bt);
+            if (lastEditedDate && lastEditedDate === _bt) {
                 if (lastEditedDate !== window.currentDate) {
                     window._dbgLog('_appInit: window.currentDate 从 ' + window.currentDate + ' 跳转为 lastEditedDate=' + lastEditedDate);
                 }
@@ -197,10 +202,19 @@ export function _initEventBusSubscriptions() {
     // data 层 Realtime 更新 → UI 层重渲染
     window._on('data:realtime-update', function(data) {
         if (!data || !data.boards || data.boards === 'all') {
-            window.renderList(); window.renderJiwang(); window.renderRank(); window.renderAuction();
-            window.renderMulti(); window.renderHotspot(); window.renderPattern(); window.renderBidding();
-            window.renderDuiban(); window.renderEmotionBoard();
-            if (typeof window.renderEtf === 'function') window.renderEtf();
+            // [RESILIENT-RENDER] 事件总线全量刷新：各看板隔离渲染，单一看板抛错不再中断其它
+            const _safeAll = (label, fn) => { try { fn(); } catch (e) { if (window._dbgLog) window._dbgLog('[ALL-RENDER] ' + label + ' 失败（已隔离）: ' + (e && e.message)); } };
+            _safeAll('renderList', () => window.renderList && window.renderList());
+            _safeAll('renderJiwang', () => window.renderJiwang && window.renderJiwang());
+            _safeAll('renderRank', () => window.renderRank && window.renderRank());
+            _safeAll('renderAuction', () => window.renderAuction && window.renderAuction());
+            _safeAll('renderMulti', () => window.renderMulti && window.renderMulti());
+            _safeAll('renderHotspot', () => window.renderHotspot && window.renderHotspot());
+            _safeAll('renderPattern', () => window.renderPattern && window.renderPattern());
+            _safeAll('renderBidding', () => window.renderBidding && window.renderBidding());
+            _safeAll('renderDuiban', () => window.renderDuiban && window.renderDuiban());
+            _safeAll('renderEmotionBoard', () => window.renderEmotionBoard && window.renderEmotionBoard());
+            if (typeof window.renderEtf === 'function') { try { window.renderEtf(); } catch (e) { if (window._dbgLog) window._dbgLog('[ALL-RENDER] renderEtf 失败（已隔离）: ' + (e && e.message)); } }
             return;
         }
         var b = data.boards;

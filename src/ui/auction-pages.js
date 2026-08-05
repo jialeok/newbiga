@@ -3381,11 +3381,18 @@
             window._syncSortStateToStore(dataSource, 1);
             window._syncSortStateToStore(dataSource, 2);
             window._updateAuctionHighlightContainerState(dataSource);
+            // [BUG-FIX] 之前只同步 store 状态 + 容器高亮类，从不重渲染行，
+            // 导致“竞/昨/平行/环比”开关打开后，行级 jing-yest-match / parallel-match
+            // class 与组内排序都不生效（Vue 未挂载，无响应式重算，仅靠本函数时
+            // 界面毫无变化）。现补上真正的行重渲染（innerHTML 路径是当前激活路径）。
+            if (typeof window.renderAuction === 'function') window.renderAuction(dataSource);
         }
 
         export function _refreshAuctionPage2OnToggle(dataSource) {
             window._syncSortStateToStore(dataSource, 2);
             window._updateAuctionHighlightContainerState(dataSource);
+            // [BUG-FIX] 同上：补上行重渲染，使竞/昨/平行/环比的排序与高亮真正生效。
+            if (typeof window.renderAuctionPage2 === 'function') window.renderAuctionPage2(dataSource);
         }
 
         export function onAuctionSortByJingYestToggle2Change() {

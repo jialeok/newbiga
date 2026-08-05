@@ -1,4 +1,4 @@
-/**
+﻿/**
  * boards-vue.js
  * 将 stocks / hotspot / pattern 三个看板改造为 Vue 3 组件化渲染。
  * - 仍复用现有数据层与编辑模态框（stocks 编辑弹窗保留原逻辑）
@@ -604,7 +604,7 @@
   // ========================================================================
   const PatternBoard = {
     setup() {
-      const expanded = ref(false);
+      const expanded = ref(true);
       const editing = ref(false);
       const draftContent = ref('');
       const draftUpdate = ref(false);
@@ -707,38 +707,80 @@
     const hotspotEl = document.getElementById('hotspotBoard');
     const patternEl = document.getElementById('patternBoard');
 
-    if (stockEl) createApp(StocksBoard).mount(stockEl);
-    if (hotspotEl) createApp(HotspotBoard).mount(hotspotEl);
-    if (patternEl) createApp(PatternBoard).mount(patternEl);
+    // [GRACE-DEGRADE] 保存原生容器内容。本环境 Vue 组件 createApp().mount() 可能抛错
+    // （c2Vue=false，组件运行时挂载失败）。Vue 的 mount 会先清空容器再渲染，一旦抛错，
+    // 容器已被清空却未回退 → 模式/题材等看板只剩空框架（紫色边框线）。故逐个 try/catch，
+    // 失败时还原容器原始 innerHTML，并保留原生 innerHTML 渲染路径（与 rank-vue.js 一致）。
+    const savedStock = stockEl ? stockEl.innerHTML : '';
+    const savedHotspot = hotspotEl ? hotspotEl.innerHTML : '';
+    const savedPattern = patternEl ? patternEl.innerHTML : '';
 
+    // [VUE-PROD-SWALLOW] Vue 3 生产构建 (vue.global.prod.js) 中 render 抛错只 console.error
+    // 不 re-throw，故 try/catch 抓不到。挂载后必须检查容器是否真的有内容；空则视为失败，
+    // 还原 innerHTML 并保留原生渲染函数（否则 renderXxx 被改成空 Vue stub → 看板只剩边框线）。
+    function _hasContent(el) { return el && el.children.length > 0; }
+
+    let stockOk = false, hotspotOk = false, patternOk = false;
+
+    if (stockEl) {
+      try { createApp(StocksBoard).mount(stockEl); stockOk = _hasContent(stockEl); }
+      catch (e) { stockOk = false; }
+      if (!stockOk) { stockEl.innerHTML = savedStock; if (window._dbgLog) window._dbgLog('[BOARD-VUE] stock 挂载失败/空内容，回退原生渲染'); }
+    }
+    if (hotspotEl) {
+      try { createApp(HotspotBoard).mount(hotspotEl); hotspotOk = _hasContent(hotspotEl); }
+      catch (e) { hotspotOk = false; }
+      if (!hotspotOk) { hotspotEl.innerHTML = savedHotspot; if (window._dbgLog) window._dbgLog('[BOARD-VUE] hotspot 挂载失败/空内容，回退原生渲染'); }
+    }
+    if (patternEl) {
+      try { createApp(PatternBoard).mount(patternEl); patternOk = _hasContent(patternEl); }
+      catch (e) { patternOk = false; }
+      if (!patternOk) { patternEl.innerHTML = savedPattern; if (window._dbgLog) window._dbgLog('[BOARD-VUE] pattern 挂载失败/空内容，回退原生渲染'); }
+    }
+
+    // 仅当对应看板挂载成功才接管其 render 函数；失败则保留原生 innerHTML 版本。
+    if (stockOk) {
     // 接管 renderList：保留统计与其他看板调度，股票列表交给 Vue
+    // [RESILIENT-RENDER] 与原生 renderList 一致：每个看板渲染互相隔离，单一看板抛错不再中断
+    // 整条链路（否则排名看板 Vue 挂载失败时，竞价变化看板 renderBidding 会被一起跳过变白板）。
     window.renderList = function (skipOtherBoards, skipAuction) {
-      window.updateStockStats(window.getTodayData ? window.getTodayData() : []);
-      if (window.updateDateDisplay) window.updateDateDisplay();
+      try { window.updateStockStats(window.getTodayData ? window.getTodayData() : []); }
+      catch (e) { if (window._dbgLog) window._dbgLog('[RENDER-LIST-VUE] updateStockStats 失败（已隔离）: ' + (e && e.message)); }
+      try { if (window.updateDateDisplay) window.updateDateDisplay(); }
+      catch (e) { if (window._dbgLog) window._dbgLog('[RENDER-LIST-VUE] updateDateDisplay 失败（已隔离）: ' + (e && e.message)); }
       if (!skipOtherBoards) {
-        if (window.renderPattern) window.renderPattern();
-        if (window.renderBidding) window.renderBidding();
-        if (window.renderJiwang) window.renderJiwang();
-        if (window.renderTagTitles) window.renderTagTitles();
-        if (window.renderRank) window.renderRank();
-        if (!skipAuction && window.renderAuction) window.renderAuction();
-        if (window.renderHotStocks) window.renderHotStocks();
-        if (window.renderMulti) window.renderMulti();
-        if (window.renderHotspot) window.renderHotspot();
-        if (window.renderEtf) window.renderEtf();
-        if (window.renderDuiban) window.renderDuiban();
-        if (window.renderWeekendStats) window.renderWeekendStats();
+        const _safe = (label, fn) => { try { fn(); } catch (e) { if (window._dbgLog) window._dbgLog('[RENDER-LIST-VUE] ' + label + ' 失败（已隔离）: ' + (e && e.message)); } };
+        // 竞价变化看板优先，确保一定能显示
+        _safe('renderBidding', () => window.renderBidding && window.renderBidding());
+        _safe('renderPattern', () => window.renderPattern && window.renderPattern());
+        _safe('renderJiwang', () => window.renderJiwang && window.renderJiwang());
+        _safe('renderTagTitles', () => window.renderTagTitles && window.renderTagTitles());
+        _safe('renderRank', () => window.renderRank && window.renderRank());
+        if (!skipAuction) _safe('renderAuction', () => window.renderAuction && window.renderAuction());
+        _safe('renderHotStocks', () => window.renderHotStocks && window.renderHotStocks());
+        _safe('renderMulti', () => window.renderMulti && window.renderMulti());
+        _safe('renderHotspot', () => window.renderHotspot && window.renderHotspot());
+        _safe('renderEtf', () => window.renderEtf && window.renderEtf());
+        _safe('renderDuiban', () => window.renderDuiban && window.renderDuiban());
+        _safe('renderWeekendStats', () => window.renderWeekendStats && window.renderWeekendStats());
       }
-      if (window.vueStocksBoardRefresh) window.vueStocksBoardRefresh();
+      try { if (window.vueStocksBoardRefresh) window.vueStocksBoardRefresh(); }
+      catch (e) { if (window._dbgLog) window._dbgLog('[RENDER-LIST-VUE] vueStocksBoardRefresh 失败（已隔离）: ' + (e && e.message)); }
     };
+    } // end if (stockOk)
 
-    window.renderHotspot = function () {
-      if (window.vueHotspotBoardRefresh) window.vueHotspotBoardRefresh();
-    };
+    // 仅当对应看板挂载成功才接管 render 函数；失败则保留原生 innerHTML 渲染（已还原容器）。
+    if (hotspotOk) {
+      window.renderHotspot = function () {
+        if (window.vueHotspotBoardRefresh) window.vueHotspotBoardRefresh();
+      };
+    }
 
-    window.renderPattern = function () {
-      if (window.vuePatternBoardRefresh) window.vuePatternBoardRefresh();
-    };
+    if (patternOk) {
+      window.renderPattern = function () {
+        if (window.vuePatternBoardRefresh) window.vuePatternBoardRefresh();
+      };
+    }
 
     // 通知 Vue 刷新一次（应对 DOMContentLoaded 之前已经触发过的渲染）
     if (window.vueStocksBoardRefresh) window.vueStocksBoardRefresh();

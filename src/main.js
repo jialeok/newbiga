@@ -73,7 +73,13 @@
                     } else {
                         window._dbgLog('[PERF-AUCTION] window.pullFromCloud 后 auctionData 未变化，跳过重复 window.renderAuction');
                     }
-                    window.renderMulti(); window.renderHotspot(); window.renderPattern(); window.renderBidding();
+                    // [RESILIENT-RENDER] 初始加载链路：各看板渲染互相隔离，单一看板抛错
+                    // 不再中断后续（尤其竞价变化看板 renderBidding，必须一定能渲染）。
+                    const _safeInit = (label, fn) => { try { fn(); } catch (e) { if (window._dbgLog) window._dbgLog('[INIT-RENDER] ' + label + ' 失败（已隔离）: ' + (e && e.message)); } };
+                    _safeInit('renderMulti', () => window.renderMulti && window.renderMulti());
+                    _safeInit('renderHotspot', () => window.renderHotspot && window.renderHotspot());
+                    _safeInit('renderPattern', () => window.renderPattern && window.renderPattern());
+                    _safeInit('renderBidding', () => window.renderBidding && window.renderBidding());
                     window.renderDuiban();
                     window.renderEmotionBoard();
                     if (typeof window.renderEtf === 'function') window.renderEtf();

@@ -800,11 +800,29 @@
         // ============================================================
         // 应用初始化入口（密码验证成功后调用）
         // ============================================================
+        // 计算北京时间"今天"（按 UTC+8，不受浏览器本地时区影响）
+        function _computeBeijingToday() {
+            const now = new Date();
+            const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+            const bj = new Date(utcMs + 8 * 3600000);
+            const y = bj.getFullYear();
+            const m = String(bj.getMonth() + 1).padStart(2, '0');
+            const d = String(bj.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+        // 暴露给其它模块（如 app-init.js 的 _appInit）复用，避免重复实现
+        window._computeBeijingToday = _computeBeijingToday;
+
         export function initApp() {
-            // currentDate 已在顶层初始化，重新读取一次 localStorage（pullFromCloud 可能更新了）
-            const savedDate = localStorage.getItem('lastEditedDate_v42');
-            if (savedDate && savedDate >= '2025-01-01') {
+            // [ISSUE#1 修复] 启动默认落到"今天"：pullFromCloud 可能更新过 currentDate，
+            // 这里重新读取 localStorage，但只有"恰为今天"才沿用，否则一律以北京时间为准
+            // 重置为今天，避免打开后停在 8/5 等旧日期、并向前串数据（"未来的日期也继承 8/5"）。
+            const _bt = _computeBeijingToday();
+            const savedDate = localStorage.getItem('lastEditedDate_' + DATA_VERSION);
+            if (savedDate && savedDate === _bt) {
                 window.setCurrentDate(savedDate);
+            } else {
+                window.setCurrentDate(_bt);
             }
             // 触发原有的 DOMContentLoaded 逻辑（已绑定在页面底部）
             window._appInit();
@@ -825,15 +843,15 @@
             }
         })();
 
+        // [ISSUE#1 修复] 启动默认落到"今天"：若持久化的 lastEditedDate 早于今天
+        // （或无效/在未来），一律以北京时间为准重置为今天，避免打开后停在 8/5 等
+        // 旧日期、并向前串数据（"未来的日期也继承 8/5"的根因就是 currentDate 卡在旧日期）。
+        const _beijingToday = _computeBeijingToday();
         window.currentDate = localStorage.getItem('lastEditedDate_' + DATA_VERSION);
-        if (!currentDate || currentDate < '2025-01-01') {
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            setCurrentDate(`${year}-${month}-${day}`);
+        const _dateValid = currentDate && /^\d{4}-\d{2}-\d{2}$/.test(currentDate) && currentDate >= '2025-01-01';
+        if (!_dateValid || currentDate !== _beijingToday) {
+            setCurrentDate(_beijingToday);
         }
-        if (currentDate < '2025-01-01') setCurrentDate('2025-01-01');
         // 统一日期写入口：同时更新全局 currentDate 与响应式 auctionStore.currentDate，
         // 杜绝"全局已切、store 未跟"导致的跨日期写错位（fetchLadderConstituentsMain 等以
         // auctionStore.currentDate 为 targetDate，store 滞后会把今天的数据写到旧日期）。
@@ -4095,7 +4113,12 @@
                 }
 
                 // 收集股票代码
-                const scMap = window._scMapCache || {};
+                let scMap = window._scMapCache || {};
+                // [FIX] 代码映射为空时按需从云端重新拉取一次（同 fetchAuctionFromNumcat）
+                if (Object.keys(scMap).length === 0 && typeof window.loadCloudStockCodeMap === 'function') {
+                    try { await window.loadCloudStockCodeMap(); } catch (e) { window._dbgLog('[NUMCAT-FIX] fillTopics 按需加载代码映射失败: ' + (e && e.message)); }
+                    scMap = window._scMapCache || {};
+                }
                 const codes = [];
                 const codeToStock = {};
                 todayList.forEach(function(s) {
@@ -4107,7 +4130,10 @@
                 });
 
                 if (codes.length === 0) {
-                    window.setApiStatus('numcatApiStatus', '❌ 没有可补全的股票（缺少代码映射）', false);
+                    const hasAnyCode = todayList.some(function(s) { return (s.code || '').trim(); });
+                    window.setApiStatus('numcatApiStatus', hasAnyCode
+                        ? '❌ 没有可补全的股票（代码映射缺失，请先「设置-导入代码映射」或重新登录后重试）'
+                        : '❌ 没有可补全的股票（缺少代码映射）', false);
                     return;
                 }
 
@@ -6799,7 +6825,19 @@
                     ? window.buildYesterdayListFromToday(todayList, auctionData, dayBefore)
                     : [];
                 const dayBeforeListWasEmpty = opts.fillDayBefore && (auctionData[dayBefore] || []).length === 0;
-                const scMap = window._scMapCache || {};
+                let scMap = window._scMapCache || {};
+
+                // [FIX] 代码映射为空时，先按需从云端重新拉取一次。
+                // 启动期 loadCloudStockCodeMap 可能因登录时序 / 网络抖动失败，导致 _scMapCache 一直为空，
+                // 后续猫抓直接报"缺少代码映射"。这里在真正抓取前兜底重试一次（失败不影响后续用 s.code 兜底）。
+                if (Object.keys(scMap).length === 0 && typeof window.loadCloudStockCodeMap === 'function') {
+                    try {
+                        await window.loadCloudStockCodeMap();
+                    } catch (e) {
+                        window._dbgLog('[NUMCAT-FIX] 按需加载代码映射失败: ' + (e && e.message));
+                    }
+                    scMap = window._scMapCache || {};
+                }
 
                 const needToday = opts.fillToday && todayList.length > 0;
                 const needYesterday = opts.fillYesterday && yesterdayList.length > 0;
@@ -6823,7 +6861,13 @@
                 if (needDayBefore) collectCodes(dayBeforeList);
 
                 if (allCodesSet.size === 0) {
-                    window.setApiStatus('numcatApiStatus', '❌ 没有可补全的股票（缺少代码映射）', false);
+                    // 二次兜底：仍无代码时，提示更明确（区分"列表本身无股票代码"与"代码映射未导入"）
+                    const hasAnyCode = todayList.some(function(s) { return (s.code || '').trim(); })
+                        || yesterdayList.some(function(s) { return (s.code || '').trim(); })
+                        || dayBeforeList.some(function(s) { return (s.code || '').trim(); });
+                    window.setApiStatus('numcatApiStatus', hasAnyCode
+                        ? '❌ 没有可补全的股票（代码映射缺失，请先「设置-导入代码映射」或重新登录后重试）'
+                        : '❌ 没有可补全的股票（股票列表无代码，且代码映射为空；请先导入股票代码映射）', false);
                     return;
                 }
 

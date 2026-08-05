@@ -9,9 +9,12 @@
   'use strict';
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
-  const Vue = window.Vue || (typeof Vue !== 'undefined' ? Vue : null);
+  // [TDZ-FIX] 同 auction-vue-mount.js：原写法在 window.Vue 不存在时会读取本行正在声明的
+  // const Vue，触发 TDZ 错误，导致 Vue 未就绪时整个 store 初始化 IIFE 抛错中断。
+  // 直接用 window.Vue（全局 Vue 即 window.Vue）即可，避免自引用 TDZ。
+  const Vue = window.Vue || null;
   if (!Vue) {
-    console.warn('[AUCTION-STORE] Vue 未就绪，跳过 store 初始化');
+    console.warn('[AUCTION-STORE] Vue 未就绪，跳过 store 初始化（保留原生 innerHTML 渲染）');
     return;
   }
 

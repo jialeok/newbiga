@@ -2027,7 +2027,12 @@
             }
             
             const weekRange = window.getWeekTradingDays(window.currentDate);
-            window.allData = getStocksData();
+            // [FIX] 不能把 window.allData 整体覆盖成“仅股票”的映射：
+            // getJiwangData()/getRankData()/getEtfData() 都依赖 window.allData.jiwang/.rank/.etf
+            // （经 loadAllData 的 500ms 缓存返回同一个对象）。若此处被覆盖成股票映射，
+            // 后续读取 getJiwangData()[dateStr] 会得到 undefined 而抛错，导致整段统计渲染中断、全部显示 0。
+            // 因此只取股票映射存到局部变量，window.allData 保持完整对象。
+            const _stocksData = window.getStocksData() || {};
             
             // 设置日期范围显示
             document.getElementById('weekendDateRange').textContent = 
@@ -2070,7 +2075,7 @@
                 // 只统计交易日
                 if (tradingDay) {
                     tradingDaysCount++; // 成交天数+1
-                    const dayData = window.allData[dateStr] || [];
+                    const dayData = _stocksData[dateStr] || [];
                     
                     // 1. 统计出手情况（记忘看板中"得出结论"和"出手情况"）
                     const dayJiwang = window.getJiwangData()[dateStr];

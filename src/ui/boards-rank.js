@@ -4,7 +4,17 @@
         export function renderRank() {
             const rankList = window.getTodayRank();
             const rankContent = document.getElementById('rankContent');
-            
+
+            // [NULL-GUARD] 排名看板已被 Vue 组件接管（rank-vue.js 将 #rankContent 替换为
+            // #rank-vue-root 并覆盖本函数）。若容器不存在，说明走 Vue 路径，委托 Vue 刷新即可，
+            // 绝不再对 null 写 innerHTML（否则会抛出 “Cannot set properties of null”）。
+            if (!rankContent) {
+                if (typeof window.vueRankBoardRefresh === 'function') {
+                    try { window.vueRankBoardRefresh(); } catch (e) { /* 忽略 Vue 刷新异常 */ }
+                }
+                return;
+            }
+
             if (rankList.length === 0) {
                 rankContent.innerHTML = `
                     <div class="rank-header-row">

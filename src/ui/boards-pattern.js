@@ -66,11 +66,10 @@
                 contentEl.innerHTML = '<div class="pattern-placeholder" id="patternPlaceholder">暂无模式心得，点击添加...</div>';
             }
             
-            // 始终显示展开/收起按钮，默认折叠状态
+            // 始终显示展开/收起按钮；默认展开显示内容（用户期望直接看到模式心得，而非只剩标题栏）
             toggleBtn.style.display = 'flex';
-            toggleBtn.textContent = '▼';
-            // 默认折叠成标题栏
-            boardEl.classList.add('minimized');
+            toggleBtn.textContent = '▲';
+            boardEl.classList.remove('minimized');
         }
 
         // 切换模式看板展开/收起
