@@ -1,0 +1,15 @@
+node_modules/
+package-lock.json
+.DS_Store
+
+# WorkBuddy internal state (not project source)
+.workbuddy/
+
+# Temporary verification scaffolding / local artifacts
+_graphtest/
+.codeartsdoer/
+.uploads/
+
+# Local backup dumps (not source)
+股票助手备份_20260802_1931.json
+index单页没改造前备份.html
