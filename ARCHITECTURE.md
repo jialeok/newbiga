@@ -460,3 +460,10 @@ ui/  可以依赖 →  logic/  可以依赖 →  data/
 
 
 
+
+- **duiban/etf/rank 看板数据加载后变空白 + 模式看板默认收起 — Issue #9c（Vue 模板 window.xxx 修复 + HTML 默认展开）**：
+  - **根因 A**：Vue 3 模板中 window.xxx 无法解析到全局 window（_ctx.window 为 undefined）。BoardCard 模板 -html="window.renderTushi(data.tushi)" 仅在 hasData=true 时求值——初始无数据时渲染成功（duibanMounted=true），数据加载后重渲染抛 TypeError 被 Vue 吞错 → 看板变空。rank-vue 同理（window.percentClass 等在 v-for 内）。
+  - **修复 A**：将模板中所有 window.xxx 改为使用 setup() 返回的函数（enderTushi/percentClass/ankPercentDisplay/updateFromDie/submit/handleSave 等），同时修复类名 bug（kind+'-window.content' → kind+'-content'、ank-window.content → ank-content）。
+  - **根因 B**：模式看板 HTML 默认带 minimized 类，enderPattern() 虽会移除，但若 Vue 先部分渲染再失败可能时序错乱。
+  - **修复 B**：从 index.html 的 #patternBoard 移除 minimized 类，默认展开。
+  - **涉及文件**：src/ui/dashboards.js（BoardCard/EditModal/createBoardApp 模板）、src/ui/components/rank-vue.js（RankBoard 模板）、index.html（patternBoard 默认展开）。

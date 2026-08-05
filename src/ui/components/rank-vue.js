@@ -146,8 +146,8 @@
         font-weight: 600;
         cursor: pointer;
       }
-      .rank-vue-window.save-btn { background: #3b82f6; color: #fff; }
-      .rank-vue-window.cancel-btn { background: #f1f5f9; color: #475569; }
+      .rank-vue-save-btn { background: #3b82f6; color: #fff; }
+      .rank-vue-cancel-btn { background: #f1f5f9; color: #475569; }
       .rank-vue-separator-row input { color: #dc2626; font-weight: 600; text-align: center; }
       .rank-vue-empty-row { height: 20px; background: transparent; }
     `;
@@ -435,11 +435,11 @@
       };
     },
     template: `
-      <div class="rank-header" @dblclick.stop="window.openEdit">
+      <div class="rank-header" @dblclick.stop="openEdit">
         <div class="rank-title">昨日最大成交额</div>
         <div class="rank-subtitle"></div>
       </div>
-      <div class="rank-window.content" @dblclick.stop="window.openEdit">
+      <div class="rank-content" @dblclick.stop="openEdit">
         <div class="rank-header-row">
           <div class="rank-header-item rank-header-number">排名</div>
           <div class="rank-header-item rank-header-stock">股票名称</div>
@@ -466,25 +466,25 @@
               <div class="rank-number">{{ item.index }}</div>
               <div class="rank-stock-name">{{ item.stock }}</div>
               <div class="rank-jitu" :class="item.isChecked ? 'checked' : 'unchecked'">{{ item.jitu }}</div>
-              <div class="rank-diezhang" :class="window.percentClass(item.percent)">{{ window.rankPercentDisplay(item.percent) }}</div>
+              <div class="rank-diezhang" :class="percentClass(item.percent)">{{ rankPercentDisplay(item.percent) }}</div>
               <div class="rank-concept" :class="item.isChecked ? 'red-text' : ''">{{ item.concept }}</div>
-              <div class="rank-turnover">{{ window.rankTurnoverDisplay(item.turnover) }}</div>
+              <div class="rank-turnover">{{ rankTurnoverDisplay(item.turnover) }}</div>
             </template>
           </div>
         </template>
       </div>
 
-      <div v-if="showModal" class="rank-vue-modal-backdrop" @click.self="window.closeEdit">
+      <div v-if="showModal" class="rank-vue-modal-backdrop" @click.self="closeEdit">
         <div class="rank-vue-modal">
           <div class="rank-vue-modal-header">
             <span>编辑昨日最大成交额</span>
-            <button @click="window.closeEdit">&times;</button>
+            <button @click="closeEdit">&times;</button>
           </div>
           <div class="rank-vue-modal-body">
             <div class="rank-vue-paste-area">
               <textarea v-model="importText" placeholder="从 Excel 复制后直接粘贴到这里"></textarea>
               <div class="rank-vue-import-status" :style="{ color: importStatus.color }">{{ importStatus.text }}</div>
-              <button type="button" class="rank-vue-add-btn" @click="window.onImport">导入粘贴数据</button>
+              <button type="button" class="rank-vue-add-btn" @click="onImport">导入粘贴数据</button>
             </div>
 
             <div v-for="(item, idx) in draft" :key="idx" :class="['rank-vue-form-row', item.type === 'empty' ? 'rank-vue-empty-row' : '', item.type === 'separator' ? 'rank-vue-separator-row' : '']">
@@ -495,7 +495,7 @@
                 <input class="rank-vue-form-percent" disabled style="visibility:hidden">
                 <input class="rank-vue-form-concept" disabled style="visibility:hidden">
                 <input class="rank-vue-form-turnover" disabled style="visibility:hidden">
-                <button type="button" class="rank-vue-remove-btn" @click="window.removeRow(idx)">&times;</button>
+                <button type="button" class="rank-vue-remove-btn" @click="removeRow(idx)">&times;</button>
               </template>
               <template v-else-if="item.type === 'separator'">
                 <div class="rank-vue-form-number"></div>
@@ -504,7 +504,7 @@
                 <input class="rank-vue-form-percent" disabled style="visibility:hidden">
                 <input class="rank-vue-form-concept" v-model="item.time" placeholder="时间">
                 <input class="rank-vue-form-turnover" disabled style="visibility:hidden">
-                <button type="button" class="rank-vue-remove-btn" @click="window.removeRow(idx)">&times;</button>
+                <button type="button" class="rank-vue-remove-btn" @click="removeRow(idx)">&times;</button>
               </template>
               <template v-else>
                 <div class="rank-vue-form-number">{{ idx + 1 }}</div>
@@ -516,14 +516,14 @@
                 <input class="rank-vue-form-percent" v-model="item.percent" placeholder="涨幅">
                 <input class="rank-vue-form-concept" v-model="item.concept" placeholder="题材">
                 <input class="rank-vue-form-turnover" v-model="item.turnover" placeholder="额">
-                <button type="button" class="rank-vue-remove-btn" @click="window.removeRow(idx)">&times;</button>
+                <button type="button" class="rank-vue-remove-btn" @click="removeRow(idx)">&times;</button>
               </template>
             </div>
-            <button type="button" class="rank-vue-add-btn" @click="window.addRow">+ 添加新行</button>
+            <button type="button" class="rank-vue-add-btn" @click="addRow">+ 添加新行</button>
           </div>
           <div class="rank-vue-modal-footer">
-            <button type="button" class="rank-vue-window.save-btn" @click="window.save">保存</button>
-            <button type="button" class="rank-vue-window.cancel-btn" @click="window.closeEdit">取消</button>
+            <button type="button" class="rank-vue-save-btn" @click="save">保存</button>
+            <button type="button" class="rank-vue-cancel-btn" @click="closeEdit">取消</button>
           </div>
         </div>
       </div>

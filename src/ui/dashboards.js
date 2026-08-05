@@ -531,7 +531,7 @@
           <div :class="kind + '-subtitle'"></div>
         </div>
       </div>
-      <div :class="kind + '-window.content'" @dblclick.stop="$emit('edit')">
+      <div :class="kind + '-content'" @dblclick.stop="$emit('edit')">
         <div :class="kind + '-scroll-container'">
           <div :class="kind + '-header-row'">
             <div :class="kind + '-header-item ' + kind + '-header-shuliang'">总数量</div>
@@ -544,7 +544,7 @@
             <div :class="kind + '-item ' + kind + '-item-shuliang'">{{ data.shuliang || '' }}</div>
             <div :class="kind + '-item ' + kind + '-item-dieZhangbi'">{{ data.die_zhangbi || '' }}</div>
             <div :class="kind + '-item ' + kind + '-item-jingtu'">{{ data.jingtu || '' }}</div>
-            <div :class="kind + '-item ' + kind + '-item-tushi'" v-html="window.renderTushi(data.tushi)"></div>
+            <div :class="kind + '-item ' + kind + '-item-tushi'" v-html="renderTushi(data.tushi)"></div>
           </div>
         </div>
       </div>
@@ -644,13 +644,13 @@
           <div class="board-modal-body">
             <div class="board-form-row">
               <span class="board-form-label">总数量</span>
-              <input class="board-input" type="text" inputmode="numeric" v-model="form.shuliang" @input="window.updateFromTotal" placeholder="总数量">
+              <input class="board-input" type="text" inputmode="numeric" v-model="form.shuliang" @input="updateFromTotal" placeholder="总数量">
             </div>
             <div class="board-form-row">
               <span class="board-form-label">跌 : 涨</span>
-              <input class="board-input" type="text" inputmode="numeric" v-model="form.die" @input="window.updateFromDie" placeholder="跌" style="flex:1">
+              <input class="board-input" type="text" inputmode="numeric" v-model="form.die" @input="updateFromDie" placeholder="跌" style="flex:1">
               <span style="color:#94a3b8">:</span>
-              <input class="board-input" type="text" inputmode="numeric" v-model="form.zhang" @input="window.updateFromZhang" placeholder="涨" style="flex:1">
+              <input class="board-input" type="text" inputmode="numeric" v-model="form.zhang" @input="updateFromZhang" placeholder="涨" style="flex:1">
             </div>
             <div class="board-form-row">
               <span class="board-form-label">竞符合数</span>
@@ -667,7 +667,7 @@
             <div class="board-hint">总数量默认 {{ defaultTotal }}，输入涨/跌或总数会自动计算另一方。</div>
           </div>
           <div class="board-modal-footer">
-            <button class="board-btn board-btn-primary" :disabled="saving" @click="window.submit">{{ saving ? '保存中...' : '保存' }}</button>
+            <button class="board-btn board-btn-primary" :disabled="saving" @click="submit">{{ saving ? '保存中...' : '保存' }}</button>
             <button class="board-btn" style="background:#f1f5f9;color:#475569" @click="$emit('close')">取消</button>
           </div>
         </div>
@@ -727,7 +727,7 @@
           :default-total="defaultTotal"
           :saving="saving"
           @close="showModal = false"
-          @save="window.handleSave"
+          @save="handleSave"
         />
       `
     });
