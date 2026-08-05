@@ -336,6 +336,10 @@
         .select()
         .single();
       if (error) throw error;
+      if (data && data.tushi !== row.tushi) {
+        await sb.from('recent_multi_data').update({ tushi: row.tushi, updated_at: row.updated_at }).eq('date', date);
+        data.tushi = row.tushi;
+      }
       boardStore.recentMulti = data;
       window.syncToLegacyStorage();
       return { data, error: null };
@@ -373,6 +377,10 @@
         .select()
         .single();
       if (error) throw error;
+      if (data && data.tushi !== row.tushi) {
+        await sb.from('early_etf_data').update({ tushi: row.tushi, updated_at: row.updated_at }).eq('date', date);
+        data.tushi = row.tushi;
+      }
       boardStore.earlyEtf = data;
       window.syncToLegacyStorage();
       return { data, error: null };
@@ -496,7 +504,7 @@
     .board-modal-header { padding: 16px; border-bottom: 1px solid #f1f5f9; font-weight: 600; font-size: 15px; }
     .board-modal-body { padding: 16px; overflow-y: auto; }
     .board-modal-footer { padding: 12px 16px 16px; display: flex; gap: 10px; }
-    .board-input { width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; box-sizing: border-box; }
+    .board-input { width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; box-sizing: border-box; -webkit-touch-callout: default; touch-action: auto; }
     .board-input:focus { outline: none; border-color: #3b82f6; }
     .board-form-row { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }
     .board-form-label { font-size: 12px; color: #64748b; width: 60px; flex-shrink: 0; }
@@ -658,7 +666,7 @@
             </div>
             <div class="board-form-row">
               <span class="board-form-label">图示</span>
-              <input class="board-input" type="text" v-model="form.tushi" placeholder="石墨链接/图示">
+              <input class="board-input" type="text" v-model="form.tushi" placeholder="石墨链接/图示" autocomplete="off" spellcheck="false">
             </div>
             <div class="board-form-row" style="flex-direction:column;align-items:flex-start;gap:4px">
               <span class="board-form-label" style="width:auto">评论</span>

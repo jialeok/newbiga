@@ -623,7 +623,14 @@
       window.refresh = refresh;
       window.vuePatternBoardRefresh = window.refresh;
 
-      function toggleExpand() { expanded.value = !expanded.value; }
+      function toggleExpand() {
+        expanded.value = !expanded.value;
+        const el = document.getElementById('patternBoard');
+        if (el) {
+          if (expanded.value) el.classList.remove('minimized');
+          else el.classList.add('minimized');
+        }
+      }
       window.toggleExpand = toggleExpand;
       function startEdit() {
         const p = window.todayPattern();
@@ -677,7 +684,7 @@
         </div>
         <div class="pattern-toggle-btn">{{ expanded ? '▲' : '▼' }}</div>
       </div>
-      <div v-show="expanded" class="pattern-window.content" @click="window.startEdit">
+      <div v-show="expanded" class="pattern-content" @click="window.startEdit">
         <div v-if="window.todayPattern().content && window.todayPattern().content.trim()" style="white-space: pre-wrap;">{{ window.todayPattern().content }}</div>
         <div v-else class="pattern-placeholder">暂无模式心得，点击添加...</div>
       </div>
@@ -689,7 +696,7 @@
             <label><input type="checkbox" v-model="draftUpdate"> 更新</label>
             <label><input type="checkbox" v-model="draftKeep"> 坚守</label>
           </div>
-          <button class="vue-edit-window.save" @click="window.save">保存模式</button>
+          <button class="vue-edit-save" @click="window.save">保存模式</button>
         </div>
       </div>
     `
@@ -732,6 +739,7 @@
       try { createApp(PatternBoard).mount(patternEl); patternOk = _hasContent(patternEl); }
       catch (e) { patternOk = false; }
       if (!patternOk) { patternEl.innerHTML = savedPattern; if (window._dbgLog) window._dbgLog('[BOARD-VUE] pattern 挂载失败/空内容，回退原生渲染'); }
+      patternEl.classList.add('minimized');
     }
 
     // 仅当对应看板挂载成功才接管其 render 函数；失败则保留原生 innerHTML 版本。

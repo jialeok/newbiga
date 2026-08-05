@@ -497,3 +497,14 @@ enderPattern() 改为保持当前折叠/展开状态（	oggleBtn.textContent = b
 enderMonthlyStats() 调用 getStocksData() 和 loadAllData() 未加 window. 前缀 → ES module 中 ReferenceError → 整个函数中断 → 所有统计显示 0/空。
     - 修复：改为 window.getStocksData() 和 window.loadAllData()。
   - **涉及文件**：index.html、src/ui/boards-pattern.js、src/ui/dashboards.js、src/ui/boards-stats.js。
+- **模式看板刷新仍展开（Vue 类名 bug）+ 图示删除保存后恢复 + 图示输入框长按无法粘贴 — Issue #12**：
+  - **A. 模式看板刷新后仍展开**：
+    - 根因：PatternBoard 模板第 684 行 `class="pattern-window.content"` 类名含点号（应为 `pattern-content`），导致 CSS `.pattern-board.minimized .pattern-content { display: none }` 不匹配 Vue 渲染内容，只有 `v-show="expanded"` 控制。虽然 `expanded=ref(false)`，但若 Vue 挂载时序或缓存问题导致 expanded 未生效，CSS 兜底失效。
+    - 修复：① 类名 `pattern-window.content` → `pattern-content`，`vue-edit-window.save` → `vue-edit-save`；② `toggleExpand` 同步切换 `#patternBoard` 的 `minimized` 类（双重保险：v-show + CSS）；③ `mountStocksBoards` 中 pattern 挂载后强制 `patternEl.classList.add('minimized')` 确保默认收起。
+  - **B. 最近多板/ETF 图示删除保存后刷新恢复**：
+    - 根因：`saveRecentMulti`/`saveEarlyEtf` 的 Supabase upsert 后未验证返回的 `data.tushi` 是否等于传入的 `row.tushi`。若 Supabase 端因约束/trigger/缓存导致 `tushi: ''` 未真正写入，`boardStore.recentMulti.tushi` 仍为旧值 → 刷新后恢复。
+    - 修复：upsert 后若 `data.tushi !== row.tushi`，用 `update` 单独强制写入 `tushi` 字段（字段级修正），再赋值 `boardStore.recentMulti`。
+  - **C. 图示输入框长按无法粘贴**：
+    - 根因：`board-input` CSS 缺少 `-webkit-touch-callout: default; touch-action: auto`，手机浏览器长按不弹粘贴菜单（全局 `* { -webkit-touch-callout: none }` 覆盖了 `input` 的默认行为）。
+    - 修复：`board-input` CSS 添加 `-webkit-touch-callout: default; touch-action: auto`；图示输入框添加 `autocomplete="off" spellcheck="false"` 避免浏览器对 URL 内容的特殊处理。
+  - **涉及文件**：src/ui/components/boards-vue.js、src/ui/dashboards.js。
