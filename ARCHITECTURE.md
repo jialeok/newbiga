@@ -463,18 +463,37 @@ ui/  可以依赖 →  logic/  可以依赖 →  data/
 
 - **duiban/etf/rank 看板数据加载后变空白 + 模式看板默认收起 — Issue #9c（Vue 模板 window.xxx 修复 + HTML 默认展开）**：
   - **根因 A**：Vue 3 模板中 window.xxx 无法解析到全局 window（_ctx.window 为 undefined）。BoardCard 模板 -html="window.renderTushi(data.tushi)" 仅在 hasData=true 时求值——初始无数据时渲染成功（duibanMounted=true），数据加载后重渲染抛 TypeError 被 Vue 吞错 → 看板变空。rank-vue 同理（window.percentClass 等在 v-for 内）。
-  - **修复 A**：将模板中所有 window.xxx 改为使用 setup() 返回的函数（enderTushi/percentClass/ankPercentDisplay/updateFromDie/submit/handleSave 等），同时修复类名 bug（kind+'-window.content' → kind+'-content'、ank-window.content → ank-content）。
-  - **根因 B**：模式看板 HTML 默认带 minimized 类，enderPattern() 虽会移除，但若 Vue 先部分渲染再失败可能时序错乱。
+  - **修复 A**：将模板中所有 window.xxx 改为使用 setup() 返回的函数（
+enderTushi/percentClass/
+ankPercentDisplay/updateFromDie/submit/handleSave 等），同时修复类名 bug（kind+'-window.content' → kind+'-content'、
+ank-window.content → 
+ank-content）。
+  - **根因 B**：模式看板 HTML 默认带 minimized 类，
+enderPattern() 虽会移除，但若 Vue 先部分渲染再失败可能时序错乱。
   - **修复 B**：从 index.html 的 #patternBoard 移除 minimized 类，默认展开。
   - **涉及文件**：src/ui/dashboards.js（BoardCard/EditModal/createBoardApp 模板）、src/ui/components/rank-vue.js（RankBoard 模板）、index.html（patternBoard 默认展开）。
 - **模式看板默认收起 + 保存按钮无反应 + 本月统计无数据 — Issue #10**：
   - **A. 模式看板默认展开**：
-    - 根因：Issue #9c 错误地移除了 HTML #patternBoard 的 minimized 类（误解用户意图），且 enderPattern() 无条件 oardEl.classList.remove('minimized') 强制展开。
-    - 修复：① index.html 加回 minimized 类（默认收起）；② src/ui/boards-pattern.js enderPattern() 改为保持当前折叠/展开状态（	oggleBtn.textContent = boardEl.classList.contains('minimized') ? '▼' : '▲'），不再强制移除 minimized。
-  - **B. duiban/etf 编辑保存按钮无反应**：
+    - 根因：Issue #9c 错误地移除了 HTML #patternBoard 的 minimized 类（误解用户意图），且 
+enderPattern() 无条件 oardEl.classList.remove('minimized') 强制展开。
+    - 修复：① index.html 加回 minimized 类（默认收起）；② src/ui/boards-pattern.js 
+enderPattern() 改为保持当前折叠/展开状态（	oggleBtn.textContent = boardEl.classList.contains('minimized') ? '▼' : '▲'），不再强制移除 minimized。
+- **模式看板刷新后仍展开 + 切换交易日卡顿 + 月统计性能 — Issue #11**：
+  - **A. 模式看板刷新/登录后仍展开**：
+    - 根因：src/ui/components/boards-vue.js PatternBoard 组件 `expanded = ref(true)` 默认展开，且 onMounted 中 `el.classList.remove('minimized')` 强制移除收起类。Vue 挂载成功后（PatternBoard 模板简单，初始渲染不求值 window.xxx，不抛错）expanded=true 控制显示，忽略 HTML 的 minimized 类。
+    - 修复：`expanded = ref(false)` 默认收起；删除 onMounted 中 classList.remove('minimized')。刷新后 Vue 重新挂载，expanded=false 收起；登录后 renderPattern 被覆盖成 Vue 刷新版不改变 expanded，保持收起。
+  - **B. 切换上/下交易日卡顿**：
+    - 根因：changeDate/handleDateSelect/goToday/goBackToCurrent 中 `window.allData = null` 清空缓存 → renderList 调 loadAllData() 重建 allData → normalizeAuctionNotes() 遍历全量 auction 数据做正则归一化（每次切换日期都重跑）。数据已在内存缓存（_stocksMemCache 等），切换日期只需换 currentDate 重新渲染，无需重建 allData。
+    - 修复：删除 4 个日期切换函数中的 `window.allData = null`。loadAllData() 走 500ms 短路缓存，不重建，不触发 normalizeAuctionNotes。
+  - **C. 本月/本周统计渲染慢 + allData 覆盖 bug**：
+    - 根因 C1：renderMonthlyStats 第 2596 行 `window.allData = window.getStocksData()` 把全对象覆盖成仅股票映射（同 Issue #7 的 renderWeeklyStats bug，此处漏修）→ 后续 getJiwangData()/getRankData()/getEtfData() 经 loadAllData 500ms 短路返回被覆盖的 allData，.jiwang/.rank/.etf 为 undefined → 统计中断/错误。
+    - 根因 C2：renderWeeklyStats 和 renderMonthlyStats 的 while 循环内每次迭代都重复调 `window.getRankData()`/`window.getEtfData()`/`JSON.parse(localStorage.getItem('duibanData'))`，一个月 20+ 交易日就重复 20+ 次相同调用/parse。
+    - 修复：① renderMonthlyStats 删除 `allData = getStocksData()` 覆盖行；② 两个函数循环前缓存 `_rankData`/`_etfData`/`_duibanData`，循环内用缓存变量，避免重复调用/parse。
+  - **涉及文件**：src/ui/components/boards-vue.js、src/ui/boards-stocks.js、src/ui/boards-stats.js。  - **B. duiban/etf 编辑保存按钮无反应**：
     - 根因：EditModal 组件 emit('window.save', ...) 发出的事件名是 'window.save'，但 createBoardApp 模板监听 @save（即 'save'），名称不匹配 → 保存处理器永不触发。
     - 修复：src/ui/dashboards.js 将 emits: ['close', 'window.save'] 改为 ['close', 'save']，emit('window.save', ...) 改为 emit('save', ...)。
   - **C. 本月统计无数据**：
-    - 根因：src/ui/boards-stats.js enderMonthlyStats() 调用 getStocksData() 和 loadAllData() 未加 window. 前缀 → ES module 中 ReferenceError → 整个函数中断 → 所有统计显示 0/空。
+    - 根因：src/ui/boards-stats.js 
+enderMonthlyStats() 调用 getStocksData() 和 loadAllData() 未加 window. 前缀 → ES module 中 ReferenceError → 整个函数中断 → 所有统计显示 0/空。
     - 修复：改为 window.getStocksData() 和 window.loadAllData()。
   - **涉及文件**：index.html、src/ui/boards-pattern.js、src/ui/dashboards.js、src/ui/boards-stats.js。

@@ -911,7 +911,7 @@
 
             window.setCurrentDate(newDate);
             window._persistCurrentDateAsLastEdited(newDate);
-            window.allData = null;
+
             window.setFilter('all');
 
             // [PERF-FIX 2026-07-26] 日期切换先把新日期显示出来，再用 rAF 渲染主要内容，
@@ -945,7 +945,7 @@
 
             window.setCurrentDate(date);
             window._persistCurrentDateAsLastEdited(date);
-            window.allData = null;
+
             window.setFilter('all');
             // [PERF-FIX 2026-07-26] 同 changeDate：关键渲染走 rAF，非关键计算延后。
             requestAnimationFrame(function() {
@@ -978,7 +978,7 @@
             
             window.setCurrentDate(today);
             window._persistCurrentDateAsLastEdited(today);
-            window.allData = null;
+
             window.setFilter('all');
             // [PERF-FIX 2026-07-26] 同 changeDate：关键渲染走 rAF，非关键计算延后。
             requestAnimationFrame(function() {
@@ -1017,7 +1017,7 @@
             
             window.setCurrentDate(beforeDate);
             window._persistCurrentDateAsLastEdited(beforeDate);
-            window.allData = null;
+
             window.setFilter('all');
             // [PERF-FIX 2026-07-26] 同 changeDate：关键渲染走 rAF，非关键计算延后。
             requestAnimationFrame(function() {

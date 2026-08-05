@@ -2033,6 +2033,10 @@
             // 后续读取 getJiwangData()[dateStr] 会得到 undefined 而抛错，导致整段统计渲染中断、全部显示 0。
             // 因此只取股票映射存到局部变量，window.allData 保持完整对象。
             const _stocksData = window.getStocksData() || {};
+            const _rankData = window.getRankData() || {};
+            const _etfData = window.getEtfData() || {};
+            let _duibanData = {};
+            try { _duibanData = JSON.parse(localStorage.getItem('duibanData') || '{}'); } catch (e) {}
             
             // 设置日期范围显示
             document.getElementById('weekendDateRange').textContent = 
@@ -2124,7 +2128,7 @@
                     }
                     
                     // 5. 统计昨日最大成交额上榜股票（从allData.rank获取）
-                    const rankData = window.getRankData();
+                    const rankData = _rankData;
                     const dayRank = rankData[dateStr];
                     if (dayRank && Array.isArray(dayRank)) {
                         dayRank.forEach(item => {
@@ -2142,7 +2146,7 @@
                     }
 
                     // 6. 统计最近多板表现（从duibanData获取）
-                    const duibanData = JSON.parse(localStorage.getItem('duibanData') || '{}');
+                    const duibanData = _duibanData;
                     const dayDuiban = duibanData[dateStr];
                     if (dayDuiban && Array.isArray(dayDuiban)) {
                         dayDuiban.forEach(item => {
@@ -2159,7 +2163,7 @@
                     }
 
                     // 7. 统计早盘板块ETF表现（从stockEtfData获取）
-                    const etfData = window.getEtfData();
+                    const etfData = _etfData;
                     const dayEtf = etfData[dateStr];
                     if (dayEtf && Array.isArray(dayEtf)) {
                         dayEtf.forEach(item => {
@@ -2593,7 +2597,10 @@
         // 渲染月统计
         export function renderMonthlyStats() {
             const monthRange = window.getMonthTradingDays(window.currentDate);
-            window.allData = window.getStocksData();
+            const _rankData = window.getRankData() || {};
+            const _etfData = window.getEtfData() || {};
+            let _duibanData = {};
+            try { _duibanData = JSON.parse(localStorage.getItem('duibanData') || '{}'); } catch (e) {}
             
             // 遍历本月每一天（只统计到当前日期为止）
             let currentCheck = new Date(monthRange.firstDayObj);
@@ -2690,7 +2697,7 @@
                     }
                     
                     // 统计昨日最大成交额上榜股票
-                    const rankData = window.getRankData();
+                    const rankData = _rankData;
                     const dayRank = rankData[dateStr];
                     if (dayRank && Array.isArray(dayRank)) {
                         dayRank.forEach(item => {
@@ -2707,7 +2714,7 @@
                     }
 
                     // 统计最近多板表现
-                    const duibanData = JSON.parse(localStorage.getItem('duibanData') || '{}');
+                    const duibanData = _duibanData;
                     const dayDuiban = duibanData[dateStr];
                     if (dayDuiban && Array.isArray(dayDuiban)) {
                         dayDuiban.forEach(item => {
@@ -2723,7 +2730,7 @@
                     }
 
                     // 统计早盘板块ETF表现
-                    const etfData = window.getEtfData();
+                    const etfData = _etfData;
                     const dayEtf = etfData[dateStr];
                     if (dayEtf && Array.isArray(dayEtf)) {
                         dayEtf.forEach(item => {

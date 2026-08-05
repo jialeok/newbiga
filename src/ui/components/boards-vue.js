@@ -604,7 +604,7 @@
   // ========================================================================
   const PatternBoard = {
     setup() {
-      const expanded = ref(true);
+      const expanded = ref(false);
       const editing = ref(false);
       const draftContent = ref('');
       const draftUpdate = ref(false);
@@ -614,10 +614,6 @@
         return window.getTodayPattern ? window.getTodayPattern() : { content: '', update: false, keep: false };
       }
       window.todayPattern = todayPattern;
-      onMounted(() => {
-        const el = document.getElementById('patternBoard');
-        if (el) el.classList.remove('minimized');
-      });
       function refresh() {
         editing.value = false;
         draftContent.value = '';
