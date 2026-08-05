@@ -765,7 +765,7 @@
         duibanEl.innerHTML = '<div id="duiban-vue-root"></div>';
         window.createBoardApp('最近多板', 'recentMulti', 56, window.saveRecentMulti, 'duiban')
           .mount('#duiban-vue-root');
-        duibanMounted = duibanEl.children.length > 0;
+        var _dr = document.getElementById('duiban-vue-root'); duibanMounted = _dr && _dr.children.length > 0;
       } catch (e) { duibanMounted = false; }
       if (!duibanMounted) {
         duibanEl.innerHTML = savedDuiban;
@@ -778,7 +778,7 @@
         etfEl.innerHTML = '<div id="etf-vue-root"></div>';
         window.createBoardApp('早盘板块ETF表现', 'earlyEtf', 48, window.saveEarlyEtf, 'etf')
           .mount('#etf-vue-root');
-        etfMounted = etfEl.children.length > 0;
+        var _er = document.getElementById('etf-vue-root'); etfMounted = _er && _er.children.length > 0;
       } catch (e) { etfMounted = false; }
       if (!etfMounted) {
         etfEl.innerHTML = savedEtf;

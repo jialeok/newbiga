@@ -453,6 +453,10 @@ ui/  可以依赖 →  logic/  可以依赖 →  data/
     - `src/ui/components/rank-vue.js` `mountRankBoard()`：加 `el.children.length === 0` 后置检查，空则 throw 进入 catch 还原原生容器。
   - **验证**：HTTP 服务器 (`py -m http.server`) 验证所有文件可访问；代码模式检查确认 `_hasContent`/`children.length`/`VUE-PROD-SWALLOW` 标记均在三个文件中。修复后 Vue mount 产生空内容时 `xxxOk=false`/`xxxMounted=false`，原生 `renderPattern`/`renderDuiban`/`renderEtf`/`renderMulti`/`renderHotspot`/`renderRank` 全部保留，由 `main.js`/`app-init.js` 在数据加载后调用，看板内容正常渲染。
   - **涉及文件**：`src/ui/components/boards-vue.js`、`src/ui/dashboards.js`、`src/ui/components/rank-vue.js`。
+- **看板仍只剩边框线（duiban/etf/rank）— Issue #9b（内层 Vue root 检查修复）**：
+  - **根因**：Issue #9 的 children.length 检查在 dashboards.js/rank-vue.js 中有误——mount 前先插入 <div id='xxx-vue-root'></div> 作为挂载点，故外层容器始终有子节点（duibanEl.children.length > 0 永远为 true），检查从未触发。模式/题材看板（boards-vue.js）直接 mount 到容器本身故 Issue #9 修复有效，但 duiban/etf/rank 仍失效。
+  - **修复**：改为检查内层 Vue root 的子节点：document.getElementById('duiban-vue-root').children.length > 0（etf/rank 同理）。
+  - **涉及文件**：src/ui/dashboards.js、src/ui/components/rank-vue.js。
 
 
 

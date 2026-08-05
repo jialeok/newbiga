@@ -550,7 +550,7 @@
 
       // [VUE-PROD-SWALLOW] Vue 3 生产构建 render 抛错只 console.error 不 re-throw。
       // 挂载后检查容器是否有内容；空则视为失败，不接管 renderRank。
-      if (el.children.length === 0) {
+      var _rr = document.getElementById('rank-vue-root'); if (!_rr || _rr.children.length === 0) {
         throw new Error('Vue mount produced empty content');
       }
 
