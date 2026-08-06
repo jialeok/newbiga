@@ -4137,15 +4137,14 @@
                 const startYMD = dates[dates.length - 1].replace(/-/g, '');
                 const endYMD = dates[0].replace(/-/g, '');
                 const params = { symbols: symbols, startdate: startYMD, enddate: endYMD };
-                window.setApiStatus('numcatApiStatus', '正在请求猫抓接口（' + allCodesSet.size + ' 只股票，连抓' + dates.length + '天，竞价量+成交量反推）...', true);
-                const fields = 'symbol,name,tradedate,auc_vol,auc_pct_chg,auc_to_pre_vol_pct';
+                window.setApiStatus('numcatApiStatus', '正在请求猫抓接口（' + allCodesSet.size + ' 只股票，连抓' + dates.length + '天，竞价量+昨成交量+涨幅）...', true);
+                const fields = 'symbol,name,tradedate,auc_vol,auc_to_pre_vol_pct';
                 const result = await window.numcatApiPost('daily_auc', fields, params);
                 const fieldList = result.fields || [];
                 const items = result.items || [];
                 const symbolIdx = fieldList.indexOf('symbol');
                 const tradedateIdx = fieldList.indexOf('tradedate');
                 const aucVolIdx = fieldList.indexOf('auc_vol');
-                const aucPctIdx = fieldList.indexOf('auc_pct_chg');
                 const ratioIdx = fieldList.indexOf('auc_to_pre_vol_pct');
                 if (symbolIdx < 0 || tradedateIdx < 0 || aucVolIdx < 0) {
                     window.setApiStatus('numcatApiStatus', '❌ 返回数据字段不完整', false);
@@ -4165,24 +4164,36 @@
                         if (ratio !== null && ratio !== undefined && ratio !== '') {
                             const r = Number(ratio);
                             if (!isNaN(r) && r > 0 && volNum > 0) {
-                                entry.yestVol = String(Math.round(volNum / r / 100));
+                                entry.yestVol = String(Math.round(volNum / r));
                             }
-                        }
-                    }
-                    if (aucPctIdx >= 0) {
-                        const rawPct = row[aucPctIdx];
-                        if (rawPct !== null && rawPct !== undefined && rawPct !== '') {
-                            const n = Number(rawPct);
-                            if (!isNaN(n)) entry.pct = (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
                         }
                     }
                     aucByDate[tradedate][code] = entry;
                 });
+                const dailyResult = await window.numcatApiPost('daily', 'symbol,tradedate,pct_chg', params);
+                const dailyFieldList = dailyResult.fields || [];
+                const dailyItems = dailyResult.items || [];
+                const dSymbolIdx = dailyFieldList.indexOf('symbol');
+                const dTradeIdx = dailyFieldList.indexOf('tradedate');
+                const dPctIdx = dailyFieldList.indexOf('pct_chg');
+                const pctByDate = {};
+                if (dSymbolIdx >= 0 && dTradeIdx >= 0 && dPctIdx >= 0) {
+                    dailyItems.forEach(function(row) {
+                        const code = String(row[dSymbolIdx] || '').trim();
+                        const tradedate = String(row[dTradeIdx] || '').trim();
+                        const rawPct = row[dPctIdx];
+                        if (!code || !tradedate || rawPct === null || rawPct === undefined || rawPct === '') return;
+                        if (!pctByDate[tradedate]) pctByDate[tradedate] = {};
+                        const n = Number(rawPct);
+                        if (!isNaN(n)) pctByDate[tradedate][code] = (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+                    });
+                }
                 let filledVolCount = 0, filledYestVolCount = 0, filledPctCount = 0, skippedCount = 0;
                 const patchesByDate = {};
                 dates.forEach(function(dateStr) {
                     const ymd = dateStr.replace(/-/g, '');
                     const dayData = aucByDate[ymd] || {};
+                    const dayPct = pctByDate[ymd] || {};
                     let dayList = (auctionData[dateStr] || []).slice();
                     const existingNames = {};
                     dayList.forEach(function(s) { if (s && s.stock) existingNames[s.stock.trim()] = true; });
@@ -4211,8 +4222,8 @@
                             filledYestVolCount++;
                             changed = true;
                         }
-                        if (dateStr === today && entry.pct && !((s.changePct || '').trim())) {
-                            s.changePct = entry.pct;
+                        if (dayPct[code] && !((s.changePct || '').trim())) {
+                            s.changePct = dayPct[code];
                             s.note = window.buildNoteFromFields(s.changePct, s.topics);
                             patch.change_pct = s.changePct;
                             patch.note = s.note;
@@ -4234,7 +4245,7 @@
                 window.renderAuction();
                 window.renderList();
                 const patchCounts = dates.map(function(d) { return (patchesByDate[d] || []).length; });
-                const resultText = '✅ 连抓' + dates.length + '天完成：竞价量+' + filledVolCount + ' / 昨日成交量(反推)+' + filledYestVolCount + ' / 涨幅+' + filledPctCount +
+                const resultText = '✅ 连抓' + dates.length + '天完成：竞价量+' + filledVolCount + ' / 昨成交量(反推)+' + filledYestVolCount + ' / 涨幅+' + filledPctCount +
                     '（各日只数：' + patchCounts.join('/') + '），跳过 ' + skippedCount + ' 只无数据';
                 window.setApiStatus('numcatApiStatus', resultText, true);
             } catch (err) {
@@ -6031,15 +6042,14 @@
                 const startYMD = dates[dates.length - 1].replace(/-/g, '');
                 const endYMD = dates[0].replace(/-/g, '');
                 const params = { symbols: symbols, startdate: startYMD, enddate: endYMD };
-                window.setApiStatus('numcatApiStatusHot', '正在请求猫抓接口（' + allCodesSet.size + ' 只股票，连抓' + dates.length + '天，竞价量+成交量反推）...', true);
-                const fields = 'symbol,name,tradedate,auc_vol,auc_pct_chg,auc_to_pre_vol_pct';
+                window.setApiStatus('numcatApiStatusHot', '正在请求猫抓接口（' + allCodesSet.size + ' 只股票，连抓' + dates.length + '天，竞价量+昨成交量+涨幅）...', true);
+                const fields = 'symbol,name,tradedate,auc_vol,auc_to_pre_vol_pct';
                 const result = await window.numcatApiPost('daily_auc', fields, params);
                 const fieldList = result.fields || [];
                 const items = result.items || [];
                 const symbolIdx = fieldList.indexOf('symbol');
                 const tradedateIdx = fieldList.indexOf('tradedate');
                 const aucVolIdx = fieldList.indexOf('auc_vol');
-                const aucPctIdx = fieldList.indexOf('auc_pct_chg');
                 const ratioIdx = fieldList.indexOf('auc_to_pre_vol_pct');
                 if (symbolIdx < 0 || tradedateIdx < 0 || aucVolIdx < 0) {
                     window.setApiStatus('numcatApiStatusHot', '❌ 返回数据字段不完整', false);
@@ -6059,24 +6069,36 @@
                         if (ratio !== null && ratio !== undefined && ratio !== '') {
                             const r = Number(ratio);
                             if (!isNaN(r) && r > 0 && volNum > 0) {
-                                entry.yestVol = String(Math.round(volNum / r / 100));
+                                entry.yestVol = String(Math.round(volNum / r));
                             }
-                        }
-                    }
-                    if (aucPctIdx >= 0) {
-                        const rawPct = row[aucPctIdx];
-                        if (rawPct !== null && rawPct !== undefined && rawPct !== '') {
-                            const n = Number(rawPct);
-                            if (!isNaN(n)) entry.pct = (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
                         }
                     }
                     aucByDate[tradedate][code] = entry;
                 });
+                const dailyResult = await window.numcatApiPost('daily', 'symbol,tradedate,pct_chg', params);
+                const dailyFieldList = dailyResult.fields || [];
+                const dailyItems = dailyResult.items || [];
+                const dSymbolIdx = dailyFieldList.indexOf('symbol');
+                const dTradeIdx = dailyFieldList.indexOf('tradedate');
+                const dPctIdx = dailyFieldList.indexOf('pct_chg');
+                const pctByDate = {};
+                if (dSymbolIdx >= 0 && dTradeIdx >= 0 && dPctIdx >= 0) {
+                    dailyItems.forEach(function(row) {
+                        const code = String(row[dSymbolIdx] || '').trim();
+                        const tradedate = String(row[dTradeIdx] || '').trim();
+                        const rawPct = row[dPctIdx];
+                        if (!code || !tradedate || rawPct === null || rawPct === undefined || rawPct === '') return;
+                        if (!pctByDate[tradedate]) pctByDate[tradedate] = {};
+                        const n = Number(rawPct);
+                        if (!isNaN(n)) pctByDate[tradedate][code] = (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+                    });
+                }
                 let filledVolCount = 0, filledYestVolCount = 0, filledPctCount = 0, skippedCount = 0;
                 const patchesByDate = {};
                 dates.forEach(function(dateStr) {
                     const ymd = dateStr.replace(/-/g, '');
                     const dayData = aucByDate[ymd] || {};
+                    const dayPct = pctByDate[ymd] || {};
                     let dayList = (hotAuctionData[dateStr] || []).slice();
                     const existingNames = {};
                     dayList.forEach(function(s) { if (s && s.stock) existingNames[s.stock.trim()] = true; });
@@ -6109,8 +6131,8 @@
                             filledYestVolCount++;
                             changed = true;
                         }
-                        if (dateStr === today && entry.pct && !((s.changePct || '').trim())) {
-                            s.changePct = entry.pct;
+                        if (dayPct[code] && !((s.changePct || '').trim())) {
+                            s.changePct = dayPct[code];
                             s.note = window.buildNoteFromFields(s.changePct, s.topics);
                             patch.change_pct = s.changePct;
                             patch.note = s.note;
@@ -6132,7 +6154,7 @@
                     });
                 });
                 const patchCounts = dates.map(function(d) { return (patchesByDate[d] || []).length; });
-                const resultText = '✅ 连抓' + dates.length + '天完成：竞价量+' + filledVolCount + ' / 昨日成交量(反推)+' + filledYestVolCount + ' / 涨幅+' + filledPctCount +
+                const resultText = '✅ 连抓' + dates.length + '天完成：竞价量+' + filledVolCount + ' / 昨成交量(反推)+' + filledYestVolCount + ' / 涨幅+' + filledPctCount +
                     '（各日只数：' + patchCounts.join('/') + '），跳过 ' + skippedCount + ' 只无数据';
                 window.setApiStatus('numcatApiStatusHot', resultText, true);
             } catch (err) {

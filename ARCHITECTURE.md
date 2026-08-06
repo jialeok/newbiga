@@ -510,13 +510,15 @@ enderMonthlyStats() 调用 getStocksData() 和 loadAllData() 未加 window. 前�
   - **涉及文件**：src/ui/components/boards-vue.js、src/ui/dashboards.js。
 - **猫抓连抓五天 + 9:25 竞价看板空列 + 封单家数显示 0 — Issue #13**：
   - **A. 猫抓手动获取从"连抓三天"改为"连抓五天"**：
-    - 需求：手动补全 5 个交易日（T~T-4）的竞价量 + 成交量，与自动抓取 worker 一致。早盘竞价 tab 和热门股票 tab 都要改。
-    - 实现（早盘竞价）：`index.html` 按钮文本改为"连抓五天补全（竞价量+成交量）"，onclick 改为 `fetchFiveDaysAuctionFromNumcat`。`src/logic/app-core.js` 新增该函数：计算 5 个交易日，请求 numcat `daily_auc` 含 `auc_to_pre_vol_pct` 字段，反推成交量 `yestVol = auc_vol / auc_to_pre_vol_pct / 100`，按日期填充 volume + yestVolume + changePct（仅今天），字段级 patch 上报。
-    - 实现（热门股票）：`index.html` 热门股票 tab 按钮同样改为"连抓五天补全（竞价量+成交量）"，onclick 改为 `fetchFiveDaysHotAuctionFromNumcat`。`src/logic/app-core.js` 新增该函数：与早盘竞价版同结构，但用 `getHotAuctionData`/`patchHotFieldBatch`/`renderHotForm`+`renderHotStocks`/`numcatApiStatusHot`，历史日列表为空时用 `buildYesterdayListFromToday` 造影子列表。
+    - 需求：手动补全 5 个交易日（T~T-4）的竞价量 + 昨成交量 + 涨幅，与自动抓取 worker 一致。早盘竞价 tab 和热门股票 tab 都要改。
+    - 实现（早盘竞价）：`index.html` 按钮文本改为"连抓五天补全（竞价量+昨成交量+涨幅）"，onclick 改为 `fetchFiveDaysAuctionFromNumcat`。`src/logic/app-core.js` 新增该函数：计算 5 个交易日，请求 numcat `daily_auc` 含 `auc_to_pre_vol_pct` 字段反推昨成交量 `yestVol = auc_vol / auc_to_pre_vol_pct`（`auc_to_pre_vol_pct` 是百分比如 5.0 表示 5%，无需额外 /100），再请求 numcat `daily` API 的 `pct_chg` 获取 5 日收盘涨幅，按日期填充 volume + yestVolume + changePct（全部 5 天），字段级 patch 上报。
+    - 实现（热门股票）：`index.html` 热门股票 tab 按钮同样改为"连抓五天补全（竞价量+昨成交量+涨幅）"，onclick 改为 `fetchFiveDaysHotAuctionFromNumcat`。`src/logic/app-core.js` 新增该函数：与早盘竞价版同结构，但用 `getHotAuctionData`/`patchHotFieldBatch`/`renderHotForm`+`renderHotStocks`/`numcatApiStatusHot`，历史日列表为空时用 `buildYesterdayListFromToday` 造影子列表。
+    - 昨成交量单位修复：`auc_to_pre_vol_pct` 是百分比（如 5.0 = 5%），正确公式 `yestVol(万股) = auc_vol / auc_to_pre_vol_pct`（与 worker 一致），旧代码多除了一次 100 导致值缩小 100 倍。
+    - 显示单位：表头/表单 placeholder 从"(万)"改为"(万股)"，明确单位。
   - **B. 9:25 竞价变化看板空列（同花顺接口）**：
     - 根因：9:25 集合竞价时刻指数/ETF 未开盘（9:30 才开盘），fuyao/腾讯接口返回 null → `bidding-calc.js` 返回 `value: null` → `bidding-workflow.js` 跳过 null 不写入 time930 列。只有"最近多板%"（883410 成分股有集合竞价撮合价）有数据。
     - 修复：`bidding-calc.js` 所有 `value: null` 兜底改为 `value: '0'` 或 `value: '0.00'`（ROW_SECTOR_ETF/ROW_TOP10 用 '0'，ROW_BIG_ETF/ROW_MAIN_INDEX 用 '0.00'），确保 9:25 各列都有值写入。
   - **C. 猫抓自动抓取封单家数显示 0**：
     - 根因：① `CONFIG.SEAL_FIELD: 'owfd_0925_count'` 单字段名精确匹配，numcat 接口字段名不稳定可能已改名；② `Number(null/'') === 0` 被当成 0 显示而非空；③ `findTodayItem` 取排序末行不校验是否为今天。
     - 修复：① `config.js` 改为候选列表 `SEAL_FIELD_CANDIDATES: ['owfd_0925_count', 'owfd_0925', 'seal_count_0925', 'fengdan_0925', 'fdjs_0925', 's_seal', 'seal_count']`；② `numcat-api.js` 的 `numcatEmoindic` 用 `pickEmotionValue` 遍历候选字段并跳过 null/undefined/空字符串；③ `findTodayItem` 用 `beijingToday()` 校验返回行日期是否为今天，找不到返回 null；④ `seal-workflow.js` sealCount 为 null 时不显示 0。
-  - **涉及文件**：index.html、src/logic/app-core.js、workers/bidding-board-worker-a/logic/bidding-calc.js、workers/bidding-board-worker-b/config.js、workers/bidding-board-worker-b/data/numcat-api.js、workers/bidding-board-worker-b/logic/seal-workflow.js、workers/_bundled/*.js。
+  - **涉及文件**：index.html、src/logic/app-core.js、src/ui/auction-render.js、src/ui/components/auction-components.js、workers/bidding-board-worker-a/logic/bidding-calc.js、workers/bidding-board-worker-b/config.js、workers/bidding-board-worker-b/data/numcat-api.js、workers/bidding-board-worker-b/logic/seal-workflow.js、workers/_bundled/*.js。

@@ -7,8 +7,8 @@
                     <div class="auction-form-row" id="auction-row-0">
                         <div class="rank-form-number">1</div>
                         <input type="text" class="form-input auction-form-stock-input" name="auction-stock-0" placeholder="股票名称">
-                        <input type="text" class="form-input auction-form-volume-input" name="auction-volume-0" placeholder="竞价量">
-                        <input type="text" class="form-input auction-form-yest-input" name="auction-yest-0" placeholder="昨日成交量">
+                        <input type="text" class="form-input auction-form-volume-input" name="auction-volume-0" placeholder="竞价量(万股)">
+                        <input type="text" class="form-input auction-form-yest-input" name="auction-yest-0" placeholder="昨日成交量(万股)">
                         <button type="button" class="remove-rank-btn" onclick="window.removeAuctionRow(0)">×</button>
                     </div>
                 `;
@@ -21,8 +21,8 @@
                     <div class="auction-form-row" id="auction-row-${index}">
                         <div class="rank-form-number">${index + 1}</div>
                         <input type="text" class="form-input auction-form-stock-input" name="auction-stock-${index}" value="${item.stock || ''}" placeholder="股票名称">
-                        <input type="text" class="form-input auction-form-volume-input" name="auction-volume-${index}" value="${item.volume || ''}" placeholder="竞价量">
-                        <input type="text" class="form-input auction-form-yest-input" name="auction-yest-${index}" value="${item.yestVolume || ''}" placeholder="昨日成交量">
+                        <input type="text" class="form-input auction-form-volume-input" name="auction-volume-${index}" value="${item.volume || ''}" placeholder="竞价量(万股)">
+                        <input type="text" class="form-input auction-form-yest-input" name="auction-yest-${index}" value="${item.yestVolume || ''}" placeholder="昨日成交量(万股)">
                         <button type="button" class="remove-rank-btn" onclick="window.removeAuctionRow(${index})">×</button>
                     </div>
                 `;
@@ -350,8 +350,8 @@
                     </div>
                     <div class="auction-header-row">
                         <div class="auction-header-item auction-header-stock">股票名称</div>
-                        <div class="auction-header-item auction-header-volume">竞价量(万)</div>
-                        <div class="auction-header-item auction-header-yest">昨日成交量(万)</div>
+                        <div class="auction-header-item auction-header-volume">竞价量(万股)</div>
+                        <div class="auction-header-item auction-header-yest">昨日成交量(万股)</div>
                         <div class="auction-header-item auction-header-ratio">占比</div>
                     </div>
                     <div class="auction-placeholder">暂无数据，双击导入</div>
@@ -393,8 +393,8 @@
                 <div class="auction-header-row" id="${_p}HeaderRow" style="cursor: pointer;">
                     <div class="auction-header-item auction-header-number">序号</div>
                     <div class="auction-header-item auction-header-stock">股票名称</div>
-                    <div class="auction-header-item auction-header-volume">竞价量(万)</div>
-                    <div class="auction-header-item auction-header-yest">昨日成交量(万)</div>
+                    <div class="auction-header-item auction-header-volume">竞价量(万股)</div>
+                    <div class="auction-header-item auction-header-yest">昨日成交量(万股)</div>
                     <div class="auction-header-item auction-header-ratio">占比</div>
                 </div>
             `;
