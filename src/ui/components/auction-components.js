@@ -198,11 +198,12 @@
             byData: _ss.byData,
             byRatio: _ss.byRatio,
             byParallel: _ss.byParallel,
-            byJingYest: _ss.byJingYest
+            byJingYest: _ss.byJingYest,
+            byJingYestRatio: _ss.byJingYestRatio
         };
-        const jingYestToggleChecked = sortState.byJingYest;
+        const jingYestToggleChecked = sortState.byJingYest || sortState.byJingYestRatio;
 
-        const highRatioToday = window.getSignalSets(window.currentDate, dataSource, { parallel: sortState.byParallel, ratioDiff: sortState.byParallel });
+        const highRatioToday = window.getSignalSets(window.currentDate, dataSource, { parallel: sortState.byParallel, ratioDiff: sortState.byParallel || sortState.byJingYestRatio });
         const duibanTushiLink = window.getDuibanTushiLink();
 
         let renderOrder = auctionList.map((it, idx) => idx);
@@ -332,12 +333,13 @@
         const sortStateP2 = {
             byRatio: _ss2.byRatio,
             byParallel: _ss2.byParallel,
-            byJingYest: _ss2.byJingYest
+            byJingYest: _ss2.byJingYest,
+            byJingYestRatio: _ss2.byJingYestRatio
         };
         const signalSetsP2 = {
             parallel: sortStateP2.byParallel ? window.getParallelStocksForDate(window.currentDate, dataSource) : null,
             jingYest: window.getJingYestHighlightSetForDate(window.currentDate, dataSource),
-            ratioDiff: sortStateP2.byParallel ? window.getRatioDiffInfoForDate(window.currentDate, dataSource) : null
+            ratioDiff: (sortStateP2.byParallel || sortStateP2.byJingYestRatio) ? window.getRatioDiffInfoForDate(window.currentDate, dataSource) : null
         };
 
         const stockTopicCount = {};
@@ -891,7 +893,7 @@
                     const signalSets = {
                         parallel: ss.byParallel ? window.getParallelStocksForDate(window.currentDate, dataSource) : null,
                         jingYest: window.getJingYestHighlightSetForDate(window.currentDate, dataSource),
-                        ratioDiff: ss.byParallel ? window.getRatioDiffInfoForDate(window.currentDate, dataSource) : null
+                        ratioDiff: (ss.byParallel || ss.byJingYestRatio) ? window.getRatioDiffInfoForDate(window.currentDate, dataSource) : null
                     };
                     const highRatioInfo = window.getHighRatioStocksForDate(window.currentDate, dataSource);
                     return {

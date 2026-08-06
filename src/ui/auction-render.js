@@ -227,13 +227,25 @@
             // 确保题材历史缓存可用（内部有幂等保护，重复调用不会重复扫描）
             window.buildTopicCache();
             // 以下两项为早盘竞价专属副作用：观察组继承 / 最近多板统计，热门股票分组不执行
+            // [PERF] 延迟到渲染完成后异步执行，避免阻塞 tab 切换的首帧绘制
             if (dataSource === 'auction') {
-                // 观察组自动继承：将上一交易日"竞/昨"达标股票自动添加到当日列表
-                window.ensureObservationStocks(window.currentDate);
-                // 买入股票进次日观察组：昨日"买了还没卖"的股票自动进今日观察组（名称后带"买"字）
-                window.ensureBoughtStocksForDate(window.currentDate);
-                // 每次渲染早盘竞价看板时，顺带重新计算一次"最近多板"统计，保证两个看板实时同步
-                window.recalcDuibanFromAuction();
+                const _sideEffectDate = window.currentDate;
+                const _runAuctionSideEffects = function() {
+                    // 防御：异步回调触发时用户可能已切到其它 tab/日期
+                    if (window.currentGroup !== 'auction') return;
+                    if (window.currentDate !== _sideEffectDate) return;
+                    // 观察组自动继承：将上一交易日"竞/昨"达标股票自动添加到当日列表
+                    window.ensureObservationStocks(_sideEffectDate);
+                    // 买入股票进次日观察组：昨日"买了还没卖"的股票自动进今日观察组（名称后带"买"字）
+                    window.ensureBoughtStocksForDate(_sideEffectDate);
+                    // 每次渲染早盘竞价看板时，顺带重新计算一次"最近多板"统计，保证两个看板实时同步
+                    window.recalcDuibanFromAuction();
+                };
+                if (typeof window.requestIdleCallback === 'function') {
+                    window.requestIdleCallback(_runAuctionSideEffects, { timeout: 200 });
+                } else {
+                    setTimeout(_runAuctionSideEffects, 0);
+                }
             }
 
             // ===== Vue 路径副作用补全（全量切换后 Vue 路径提前 return，需把 innerHTML 路径
@@ -277,7 +289,7 @@
                     window.schedulePushDailyHighlights(window.currentDate, _jingYestHL, dataSource);
                 }
                 const _ss0 = window.auctionStore ? window.auctionStore.sortState[dataSource === 'hot' ? 'hot' : 'auction'] : null;
-                if (_ss0 && _ss0.byJingYest && _jingYestHL && _jingYestHL.size === 0) {
+                if (_ss0 && (_ss0.byJingYest || _ss0.byJingYestRatio) && _jingYestHL && _jingYestHL.size === 0) {
                     window.maybeShowJingYestEmptyToast();
                 }
             }
@@ -502,7 +514,7 @@
             const parallelStocksToday = window.getParallelStocksForDate(window.currentDate, dataSource);
             // "竞/昨"高光：统一通过 getJingYestHighlightSetForDate 获取（含 digitGap≤1 过滤），
             // 高光显示与排序 tier0 用同一份返回结果，杜绝分叉。
-            const jingYestToggleChecked = document.getElementById(_p + 'SortByJingYestToggle')?.checked;
+            const jingYestToggleChecked = document.getElementById(_p + 'SortByJingYestToggle')?.checked || document.getElementById(_p + 'SortByJingYestRatioToggle')?.checked;
             const jingYestHighlightSet = window.getJingYestHighlightSetForDate(window.currentDate, dataSource);
             // 若全量快照缓存有数据（说明函数内部走了实时计算路径），推送高光到 highlights 表
             const _fullCache = dataSource === 'hot' ? window._hotFullRowCache : window._auctionMemCache;
@@ -553,6 +565,7 @@
             const sortByRatioEnabled = document.getElementById(_p + 'SortByRatioToggle')?.checked;
             const sortByParallelEnabled = document.getElementById(_p + 'SortByParallelToggle')?.checked;
             const sortByJingYestEnabled = document.getElementById(_p + 'SortByJingYestToggle')?.checked;
+            const sortByJingYestRatioEnabled = document.getElementById(_p + 'SortByJingYestRatioToggle')?.checked;
 
             if (sortByDataEnabled) {
                 const dataCountCache = renderOrder.map(idx => {
@@ -604,6 +617,29 @@
                             return b.ratio - a.ratio; // 位数差相同时，比值从高到低
                         }
                         return a.pos - b.pos; // tier2：保持原相对顺序
+                    })
+                    .map(x => x.idx);
+            } else if (sortByJingYestRatioEnabled) {
+                // "竞/昨占比"独立排序：符合竞昨条件（蓝色高光）的按占比从高到低，其余保持原序
+                const allRatioDiffInfo = window.getRatioDiffInfoForDate(window.currentDate, dataSource);
+                renderOrder = renderOrder
+                    .map((idx, pos) => {
+                        const stockName = auctionList[idx] && auctionList[idx].stock ? auctionList[idx].stock.trim() : '';
+                        const isHighlight = stockName && jingYestHighlightSet.has(stockName);
+                        const tier = isHighlight ? 0 : 1;
+                        const info = isHighlight ? allRatioDiffInfo.get(stockName) : null;
+                        const jr = info ? info.jingRatio : null;
+                        return { idx, pos, jr, tier };
+                    })
+                    .sort((a, b) => {
+                        if (a.tier !== b.tier) return a.tier - b.tier;
+                        if (a.tier === 0) {
+                            if (a.jr === null && b.jr === null) return a.pos - b.pos;
+                            if (a.jr === null) return 1;
+                            if (b.jr === null) return -1;
+                            return b.jr - a.jr;
+                        }
+                        return a.pos - b.pos;
                     })
                     .map(x => x.idx);
             } else if (sortByParallelEnabled) {

@@ -230,6 +230,26 @@
                 }).map(x => x.idx);
             }
 
+            if (sortState.byJingYestRatio) {
+                const info = ratioDiff;
+                return renderOrder.map((idx, pos) => {
+                    const nm = auctionList[idx] && auctionList[idx].stock ? auctionList[idx].stock.trim() : '';
+                    const ih = nm && jingYestHighlightSet && jingYestHighlightSet.has(nm);
+                    const tier = ih ? 0 : 1;
+                    const fi = ih ? (info ? info.get(nm) : null) : null;
+                    return { idx, pos, jr: fi ? fi.jingRatio : null, tier };
+                }).sort((a, b) => {
+                    if (a.tier !== b.tier) return a.tier - b.tier;
+                    if (a.tier === 0) {
+                        if (a.jr === null && b.jr === null) return a.pos - b.pos;
+                        if (a.jr === null) return 1;
+                        if (b.jr === null) return -1;
+                        return b.jr - a.jr;
+                    }
+                    return a.pos - b.pos;
+                }).map(x => x.idx);
+            }
+
             if (sortState.byParallel) {
                 const ps = parallel;
                 const info = ratioDiff;
@@ -306,6 +326,26 @@
                         if (b.digitGap === null) return -1;
                         if (a.digitGap !== b.digitGap) return a.digitGap - b.digitGap;
                         return b.ratio - a.ratio;
+                    }
+                    return a.pos - b.pos;
+                }).map(x => x.s);
+            }
+
+            if (sortState.byJingYestRatio) {
+                const info = ratioDiff;
+                return stocks.map((s, pos) => {
+                    const nm = s.stock ? s.stock.trim() : '';
+                    const ih = nm && jingYestHighlightSet && jingYestHighlightSet.has(nm);
+                    const tier = ih ? 0 : 1;
+                    const fi = ih ? (info ? info.get(nm) : null) : null;
+                    return { s, pos, jr: fi ? fi.jingRatio : null, tier };
+                }).sort((a, b) => {
+                    if (a.tier !== b.tier) return a.tier - b.tier;
+                    if (a.tier === 0) {
+                        if (a.jr === null && b.jr === null) return a.pos - b.pos;
+                        if (a.jr === null) return 1;
+                        if (b.jr === null) return -1;
+                        return b.jr - a.jr;
                     }
                     return a.pos - b.pos;
                 }).map(x => x.s);

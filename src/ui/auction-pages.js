@@ -57,13 +57,14 @@
             const sortByRatioEnabled2 = document.getElementById(_p + 'SortByRatioToggle2')?.checked;
             // 是否开启"平行"（分组内部把 今日竞价量>T-1竞价量 且 T-1成交量>T-2成交量 的股票排最前面）
             const sortByParallelEnabled2 = document.getElementById(_p + 'SortByParallelToggle2')?.checked;
-            const parallelStockNames2 = sortByParallelEnabled2 ? window.getParallelStocksForDate(window.currentDate, dataSource) : null;
+            const parallelStockNames2 = (sortByParallelEnabled2 || sortByJingYestRatioEnabled2) ? window.getParallelStocksForDate(window.currentDate, dataSource) : null;
             // 是否开启"竞/昨"（在平行基础上，进一步要求 今/昨比 > 昨/前比）；集合本身不依赖开关，随时计算以便"竞/昨数"常驻显示
             const sortByJingYestEnabled2 = document.getElementById(_p + 'SortByJingYestToggle2')?.checked;
+            const sortByJingYestRatioEnabled2 = document.getElementById(_p + 'SortByJingYestRatioToggle2')?.checked;
             // "竞/昨"高光：统一用 getJingYestHighlightSetForDate（含 digitGap≤1 过滤），与第一页/排序 tier0 口径一致
             const jingYestHighlightSet2 = window.getJingYestHighlightSetForDate(window.currentDate, dataSource);
             // 若"竞/昨"（第二页）开启且高光子集为空，弹一次警示Toast；用同一个防抖标记避免与第一页同一时刻重复弹出
-            if (sortByJingYestEnabled2 && jingYestHighlightSet2 && jingYestHighlightSet2.size === 0) {
+            if ((sortByJingYestEnabled2 || sortByJingYestRatioEnabled2) && jingYestHighlightSet2 && jingYestHighlightSet2.size === 0) {
                 window.maybeShowJingYestEmptyToast();
             }
 
@@ -243,6 +244,32 @@
                             return a.pos - b.pos; // tier2：保持原相对顺序
                         })
                         .map(x => x.s);
+                } else if (sortByJingYestRatioEnabled2 && parallelStockNames2) {
+                    // "竞/昨占比"独立排序：符合竞昨条件（蓝色高光）的按占比(今/昨比)从高到低排，其余保持原序
+                    const allRatioDiffInfo2 = window.getRatioDiffInfoForDate(window.currentDate, dataSource);
+                    stocksToRender = group.stocks
+                        .map((s, pos) => {
+                            const name = s.stock ? s.stock.trim() : '';
+                            const isParallel = parallelStockNames2.has(name);
+                            const isHighlight = name && jingYestHighlightSet2 && jingYestHighlightSet2.has(name);
+                            const tier = isHighlight ? 0 : (isParallel ? 1 : 2);
+                            const fallbackInfo = (tier === 0 || tier === 1) ? allRatioDiffInfo2.get(name) : null;
+                            const diff = fallbackInfo ? fallbackInfo.diff : null;
+                            const jr = fallbackInfo ? fallbackInfo.jingRatio : null;
+                            return { s, pos, diff, jr, tier };
+                        })
+                        .sort((a, b) => {
+                            if (a.tier !== b.tier) return a.tier - b.tier;
+                            if (a.tier === 0 || a.tier === 1) {
+                                if (a.jr === null && b.jr === null) return a.pos - b.pos;
+                                if (a.jr === null) return 1;
+                                if (b.jr === null) return -1;
+                                if (a.jr !== b.jr) return b.jr - a.jr;
+                                return b.diff - a.diff;
+                            }
+                            return a.pos - b.pos;
+                        })
+                        .map(x => x.s);
                 } else if (sortByParallelEnabled2 && parallelStockNames2) {
                     if (sortByJingYestEnabled2) {
                         // "竞/昨"是"平行"的加强筛选，排序需三层：
@@ -376,8 +403,8 @@
                     }
                     // 竞放量高光：仅在"环比"开关打开时才显示；平行高光：仅在"平行"开关打开且"竞/昨"未开启时才显示，优先于竞放量高光
                     // 竞/昨高光：仅在"竞/昨"开关打开时才显示，优先于平行高光；开启后不再叠加平行高光，避免混淆
-                    const isJingYestMatch2 = sortByJingYestEnabled2 && jingYestHighlightSet2 && stock.stock && jingYestHighlightSet2.has(stock.stock.trim());
-                    const isParallelMatch2 = sortByParallelEnabled2 && !sortByJingYestEnabled2 && parallelStockNames2 && stock.stock && parallelStockNames2.has(stock.stock.trim());
+                    const isJingYestMatch2 = (sortByJingYestEnabled2 || sortByJingYestRatioEnabled2) && jingYestHighlightSet2 && stock.stock && jingYestHighlightSet2.has(stock.stock.trim());
+                    const isParallelMatch2 = sortByParallelEnabled2 && !sortByJingYestEnabled2 && !sortByJingYestRatioEnabled2 && parallelStockNames2 && stock.stock && parallelStockNames2.has(stock.stock.trim());
                     const isHighRatioMatch2 = sortByRatioEnabled2 && stock.stock && highRatioInfo2.stockNames.has(stock.stock.trim());
                     if (isJingYestMatch2) {
                         rowClass += ' jing-yest-match';
@@ -3258,20 +3285,24 @@
                 const r = document.getElementById(pre + 'SortByRatioToggle2');
                 const pa = document.getElementById(pre + 'SortByParallelToggle2');
                 const j = document.getElementById(pre + 'SortByJingYestToggle2');
+                const jr = document.getElementById(pre + 'SortByJingYestRatioToggle2');
                 const s = window.auctionStore.sortStateP2[p];
                 s.byRatio = !!(r && r.checked);
                 s.byParallel = !!(pa && pa.checked);
                 s.byJingYest = !!(j && j.checked);
+                s.byJingYestRatio = !!(jr && jr.checked);
             } else {
                 const d = document.getElementById(pre + 'SortByDataToggle');
                 const r = document.getElementById(pre + 'SortByRatioToggle');
                 const pa = document.getElementById(pre + 'SortByParallelToggle');
                 const j = document.getElementById(pre + 'SortByJingYestToggle');
+                const jr = document.getElementById(pre + 'SortByJingYestRatioToggle');
                 const s = window.auctionStore.sortState[p];
                 s.byData = !!(d && d.checked);
                 s.byRatio = !!(r && r.checked);
                 s.byParallel = !!(pa && pa.checked);
                 s.byJingYest = !!(j && j.checked);
+                s.byJingYestRatio = !!(jr && jr.checked);
             }
         }
 
@@ -3296,8 +3327,10 @@
                 // 与"平行"、"竞/昨"互斥，打开这个就关闭另外两个（"竞/昨"是"平行"的加强条件，必须一并关闭）
                 const parallelToggle2 = document.getElementById('auctionSortByParallelToggle2');
                 const jingYestToggle2 = document.getElementById('auctionSortByJingYestToggle2');
+                const jingYestRatioToggle2 = document.getElementById('auctionSortByJingYestRatioToggle2');
                 if (parallelToggle2) parallelToggle2.checked = false;
                 if (jingYestToggle2) jingYestToggle2.checked = false;
+                if (jingYestRatioToggle2) jingYestRatioToggle2.checked = false;
             }
             window._refreshAuctionPage2OnToggle('auction');
         }
@@ -3314,6 +3347,8 @@
                 // 关闭"平行"时，"竞/昨"是平行的子条件，必须一并关闭
                 const jingYestToggle2 = document.getElementById('auctionSortByJingYestToggle2');
                 if (jingYestToggle2) jingYestToggle2.checked = false;
+                const jingYestRatioToggle2 = document.getElementById('auctionSortByJingYestRatioToggle2');
+                if (jingYestRatioToggle2) jingYestRatioToggle2.checked = false;
             }
             window._refreshAuctionPage2OnToggle('auction');
         }
@@ -3366,11 +3401,11 @@
             const content2 = document.getElementById(p + 'Content2');
             const enabled = function(el) { return !!(el && el.checked); };
             if (content) {
-                content.classList.toggle('jing-yest-enabled', enabled(document.getElementById(p + 'SortByJingYestToggle')));
+                content.classList.toggle('jing-yest-enabled', enabled(document.getElementById(p + 'SortByJingYestToggle')) || enabled(document.getElementById(p + 'SortByJingYestRatioToggle')));
                 content.classList.toggle('parallel-enabled', enabled(document.getElementById(p + 'SortByParallelToggle')));
             }
             if (content2) {
-                content2.classList.toggle('jing-yest-enabled', enabled(document.getElementById(p + 'SortByJingYestToggle2')));
+                content2.classList.toggle('jing-yest-enabled', enabled(document.getElementById(p + 'SortByJingYestToggle2')) || enabled(document.getElementById(p + 'SortByJingYestRatioToggle2')));
                 content2.classList.toggle('parallel-enabled', enabled(document.getElementById(p + 'SortByParallelToggle2')));
             }
         }
@@ -3400,13 +3435,32 @@
             const jingYestChecked = document.getElementById('auctionSortByJingYestToggle2').checked;
             const parallelToggle2 = document.getElementById('auctionSortByParallelToggle2');
             if (jingYestChecked) {
-                // 打开"竞/昨" → 联动打开"平行"，并保持与"环比"互斥
+                // 打开"竞/昨" → 联动打开"平行"，并保持与"环比"、"竞/昨占比"互斥
                 const ratioToggle2 = document.getElementById('auctionSortByRatioToggle2');
+                const jingYestRatioToggle2 = document.getElementById('auctionSortByJingYestRatioToggle2');
                 if (ratioToggle2) ratioToggle2.checked = false;
+                if (jingYestRatioToggle2) jingYestRatioToggle2.checked = false;
                 if (parallelToggle2) parallelToggle2.checked = true;
             } else {
                 // 关闭"竞/昨" → 联动关闭"平行"
                 if (parallelToggle2) parallelToggle2.checked = false;
+                window._clearAuctionRowHighlights('auction');
+            }
+            window._refreshAuctionPage2OnToggle('auction');
+        }
+
+        // 第二页"竞/昨占比"开关变化时的处理：独立排序模式
+        export function onAuctionSortByJingYestRatioToggle2Change() {
+            window.resetAuctionExpansionOnToggle('auction', true);
+            const jingYestRatioChecked = document.getElementById('auctionSortByJingYestRatioToggle2').checked;
+            if (jingYestRatioChecked) {
+                const ratioToggle2 = document.getElementById('auctionSortByRatioToggle2');
+                const parallelToggle2 = document.getElementById('auctionSortByParallelToggle2');
+                const jingYestToggle2 = document.getElementById('auctionSortByJingYestToggle2');
+                if (ratioToggle2) ratioToggle2.checked = false;
+                if (parallelToggle2) parallelToggle2.checked = false;
+                if (jingYestToggle2) jingYestToggle2.checked = false;
+            } else {
                 window._clearAuctionRowHighlights('auction');
             }
             window._refreshAuctionPage2OnToggle('auction');
@@ -3439,6 +3493,8 @@
                 // "竞/昨"是"平行"的加强条件，平行关闭时竞/昨必须一并关闭
                 const jingYestToggle = document.getElementById('auctionSortByJingYestToggle');
                 if (jingYestToggle) jingYestToggle.checked = false;
+                const jingYestRatioToggle = document.getElementById('auctionSortByJingYestRatioToggle');
+                if (jingYestRatioToggle) jingYestRatioToggle.checked = false;
             }
             // 重新渲染以应用新的排序顺序（renderAuction 内部会读取开关的最新状态）
             window._refreshAuctionOnToggle('auction');
@@ -3453,9 +3509,11 @@
                 const sortToggle = document.getElementById('auctionSortByDataToggle');
                 const parallelToggle = document.getElementById('auctionSortByParallelToggle');
                 const jingYestToggle = document.getElementById('auctionSortByJingYestToggle');
+                const jingYestRatioToggle = document.getElementById('auctionSortByJingYestRatioToggle');
                 if (sortToggle) sortToggle.checked = false;
                 if (parallelToggle) parallelToggle.checked = false;
                 if (jingYestToggle) jingYestToggle.checked = false;
+                if (jingYestRatioToggle) jingYestRatioToggle.checked = false;
                 // 注意：不联动打开"全部展开"，需用户手动开启
             }
             window._refreshAuctionOnToggle('auction');
@@ -3476,6 +3534,8 @@
                 // 关闭"平行"时，"竞/昨"是平行的子条件，必须一并关闭，否则条件失去依据
                 const jingYestToggle = document.getElementById('auctionSortByJingYestToggle');
                 if (jingYestToggle) jingYestToggle.checked = false;
+                const jingYestRatioToggle = document.getElementById('auctionSortByJingYestRatioToggle');
+                if (jingYestRatioToggle) jingYestRatioToggle.checked = false;
             }
             window._refreshAuctionOnToggle('auction');
         }
@@ -3488,11 +3548,13 @@
             const jingYestChecked = document.getElementById('auctionSortByJingYestToggle').checked;
             const parallelToggle = document.getElementById('auctionSortByParallelToggle');
             if (jingYestChecked) {
-                // 打开"竞/昨" → 联动打开"平行"，并保持与"数据"、"环比"互斥
+                // 打开"竞/昨" → 联动打开"平行"，并保持与"数据"、"环比"、"竞/昨占比"互斥
                 const sortToggle = document.getElementById('auctionSortByDataToggle');
                 const ratioToggle = document.getElementById('auctionSortByRatioToggle');
+                const jingYestRatioToggle = document.getElementById('auctionSortByJingYestRatioToggle');
                 if (sortToggle) sortToggle.checked = false;
                 if (ratioToggle) ratioToggle.checked = false;
+                if (jingYestRatioToggle) jingYestRatioToggle.checked = false;
                 if (parallelToggle) parallelToggle.checked = true;
             } else {
                 // 关闭"竞/昨" → 联动关闭"平行"
@@ -3501,6 +3563,29 @@
             }
             window._refreshAuctionOnToggle('auction');
         }
+
+        // "竞/昨占比"开关变化时的处理：独立排序模式，与所有其它开关互斥
+        // 打开时关闭所有其它开关（数据/环比/平行/竞昨），仅按竞昨达标条件筛选+占比排序
+        // 关闭时恢复默认。不影响其它开关的正常功能。
+        export function onAuctionSortByJingYestRatioToggleChange() {
+            window.resetAuctionExpansionOnToggle('auction', false);
+            const jingYestRatioChecked = document.getElementById('auctionSortByJingYestRatioToggle').checked;
+            if (jingYestRatioChecked) {
+                // 打开"竞/昨占比" → 关闭所有其它排序开关（独立模式）
+                const sortToggle = document.getElementById('auctionSortByDataToggle');
+                const ratioToggle = document.getElementById('auctionSortByRatioToggle');
+                const parallelToggle = document.getElementById('auctionSortByParallelToggle');
+                const jingYestToggle = document.getElementById('auctionSortByJingYestToggle');
+                if (sortToggle) sortToggle.checked = false;
+                if (ratioToggle) ratioToggle.checked = false;
+                if (parallelToggle) parallelToggle.checked = false;
+                if (jingYestToggle) jingYestToggle.checked = false;
+            } else {
+                window._clearAuctionRowHighlights('auction');
+            }
+            window._refreshAuctionOnToggle('auction');
+        }
+
 
         // ===== 热门股票侧排序开关事件处理函数 =====
         // "全部展开"开关变化时的处理（热门股票）
@@ -3528,6 +3613,8 @@
                 // "竞/昨"是"平行"的加强条件，平行关闭时竞/昨必须一并关闭
                 const jingYestToggle = document.getElementById('hotSortByJingYestToggle');
                 if (jingYestToggle) jingYestToggle.checked = false;
+                const jingYestRatioToggle = document.getElementById('hotSortByJingYestRatioToggle');
+                if (jingYestRatioToggle) jingYestRatioToggle.checked = false;
             }
             window._refreshAuctionOnToggle('hot');
         }
@@ -3540,9 +3627,11 @@
                 const sortToggle = document.getElementById('hotSortByDataToggle');
                 const parallelToggle = document.getElementById('hotSortByParallelToggle');
                 const jingYestToggle = document.getElementById('hotSortByJingYestToggle');
+                const jingYestRatioToggle = document.getElementById('hotSortByJingYestRatioToggle');
                 if (sortToggle) sortToggle.checked = false;
                 if (parallelToggle) parallelToggle.checked = false;
                 if (jingYestToggle) jingYestToggle.checked = false;
+                if (jingYestRatioToggle) jingYestRatioToggle.checked = false;
             }
             window._refreshAuctionOnToggle('hot');
         }
@@ -3559,6 +3648,8 @@
             } else {
                 const jingYestToggle = document.getElementById('hotSortByJingYestToggle');
                 if (jingYestToggle) jingYestToggle.checked = false;
+                const jingYestRatioToggle = document.getElementById('hotSortByJingYestRatioToggle');
+                if (jingYestRatioToggle) jingYestRatioToggle.checked = false;
             }
             window._refreshAuctionOnToggle('hot');
         }
@@ -3571,11 +3662,32 @@
             if (jingYestChecked) {
                 const sortToggle = document.getElementById('hotSortByDataToggle');
                 const ratioToggle = document.getElementById('hotSortByRatioToggle');
+                const jingYestRatioToggle = document.getElementById('hotSortByJingYestRatioToggle');
                 if (sortToggle) sortToggle.checked = false;
                 if (ratioToggle) ratioToggle.checked = false;
+                if (jingYestRatioToggle) jingYestRatioToggle.checked = false;
                 if (parallelToggle) parallelToggle.checked = true;
             } else {
                 if (parallelToggle) parallelToggle.checked = false;
+                window._clearAuctionRowHighlights('hot');
+            }
+            window._refreshAuctionOnToggle('hot');
+        }
+
+        // "竞/昨占比"开关变化时的处理（热门股票）：独立排序模式
+        export function onHotSortByJingYestRatioToggleChange() {
+            window.resetAuctionExpansionOnToggle('hot', false);
+            const jingYestRatioChecked = document.getElementById('hotSortByJingYestRatioToggle').checked;
+            if (jingYestRatioChecked) {
+                const sortToggle = document.getElementById('hotSortByDataToggle');
+                const ratioToggle = document.getElementById('hotSortByRatioToggle');
+                const parallelToggle = document.getElementById('hotSortByParallelToggle');
+                const jingYestToggle = document.getElementById('hotSortByJingYestToggle');
+                if (sortToggle) sortToggle.checked = false;
+                if (ratioToggle) ratioToggle.checked = false;
+                if (parallelToggle) parallelToggle.checked = false;
+                if (jingYestToggle) jingYestToggle.checked = false;
+            } else {
                 window._clearAuctionRowHighlights('hot');
             }
             window._refreshAuctionOnToggle('hot');
@@ -3601,8 +3713,10 @@
             if (ratioChecked) {
                 const parallelToggle2 = document.getElementById('hotSortByParallelToggle2');
                 const jingYestToggle2 = document.getElementById('hotSortByJingYestToggle2');
+                const jingYestRatioToggle2 = document.getElementById('hotSortByJingYestRatioToggle2');
                 if (parallelToggle2) parallelToggle2.checked = false;
                 if (jingYestToggle2) jingYestToggle2.checked = false;
+                if (jingYestRatioToggle2) jingYestRatioToggle2.checked = false;
             }
             window._refreshAuctionPage2OnToggle('hot');
         }
@@ -3617,6 +3731,8 @@
             } else {
                 const jingYestToggle2 = document.getElementById('hotSortByJingYestToggle2');
                 if (jingYestToggle2) jingYestToggle2.checked = false;
+                const jingYestRatioToggle2 = document.getElementById('hotSortByJingYestRatioToggle2');
+                if (jingYestRatioToggle2) jingYestRatioToggle2.checked = false;
             }
             window._refreshAuctionPage2OnToggle('hot');
         }
@@ -3628,10 +3744,29 @@
             const parallelToggle2 = document.getElementById('hotSortByParallelToggle2');
             if (jingYestChecked) {
                 const ratioToggle2 = document.getElementById('hotSortByRatioToggle2');
+                const jingYestRatioToggle2 = document.getElementById('hotSortByJingYestRatioToggle2');
                 if (ratioToggle2) ratioToggle2.checked = false;
+                if (jingYestRatioToggle2) jingYestRatioToggle2.checked = false;
                 if (parallelToggle2) parallelToggle2.checked = true;
             } else {
                 if (parallelToggle2) parallelToggle2.checked = false;
+                window._clearAuctionRowHighlights('hot');
+            }
+            window._refreshAuctionPage2OnToggle('hot');
+        }
+
+        // 第二页"竞/昨占比"开关变化时的处理（热门股票）：独立排序模式
+        export function onHotSortByJingYestRatioToggle2Change() {
+            window.resetAuctionExpansionOnToggle('hot', true);
+            const jingYestRatioChecked = document.getElementById('hotSortByJingYestRatioToggle2').checked;
+            if (jingYestRatioChecked) {
+                const ratioToggle2 = document.getElementById('hotSortByRatioToggle2');
+                const parallelToggle2 = document.getElementById('hotSortByParallelToggle2');
+                const jingYestToggle2 = document.getElementById('hotSortByJingYestToggle2');
+                if (ratioToggle2) ratioToggle2.checked = false;
+                if (parallelToggle2) parallelToggle2.checked = false;
+                if (jingYestToggle2) jingYestToggle2.checked = false;
+            } else {
                 window._clearAuctionRowHighlights('hot');
             }
             window._refreshAuctionPage2OnToggle('hot');
@@ -3654,6 +3789,9 @@
             <p>① 竞/昨达标：按位数差从小到大排，位数差相同按差值从高到低排。</p>
             <p>② 仅平行达标（竞/昨未达标）：同样按位数差→差值排，排在①之后（差值不要求＞0）。</p>
             <p>③ 平行也不达标：保持原顺序，垫底。</p>
+            <h4><span class="help-tag tag-jingyest">竞/昨占比</span></h4>
+            <p>与"竞/昨"同一筛选条件（平行+差值＞0），但按"占比"(今/昨比)从高到低排，占比相同再按差值排。</p>
+            <p>开启时联动打开"竞/昨"+"平行"，与"竞/昨"互斥（排序方式不同）。</p>
         `;
 
         // 展开/收起排序规则说明浮层。panelId 为对应页面（第一页/第二页）的浮层元素 id

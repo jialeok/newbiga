@@ -130,7 +130,7 @@
                 const yestRatio = yestVolume / prevVolume;
 
                 const digitGap = Math.abs(window.getDigitCount(todayVolume) - window.getDigitCount(yestVolume));
-                infoMap.set(name, { diff: jingRatio - yestRatio, digitGap });
+                infoMap.set(name, { diff: jingRatio - yestRatio, digitGap, jingRatio });
             });
             if (__sc && __fp !== null) __sc[__k] = { fp: __fp, value: infoMap };
             return infoMap;

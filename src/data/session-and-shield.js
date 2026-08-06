@@ -64,12 +64,12 @@
                 p2ExpandedTopics: new Set(),
                 highlightStock: '',
                 sortState: {
-                    auction: { byData: false, byRatio: false, byParallel: false, byJingYest: false },
-                    hot: { byData: false, byRatio: false, byParallel: false, byJingYest: false }
+                    auction: { byData: false, byRatio: false, byParallel: false, byJingYest: false, byJingYestRatio: false },
+                    hot: { byData: false, byRatio: false, byParallel: false, byJingYest: false, byJingYestRatio: false }
                 },
                 sortStateP2: {
-                    auction: { byRatio: false, byParallel: false, byJingYest: false },
-                    hot: { byRatio: false, byParallel: false, byJingYest: false }
+                    auction: { byRatio: false, byParallel: false, byJingYest: false, byJingYestRatio: false },
+                    hot: { byRatio: false, byParallel: false, byJingYest: false, byJingYestRatio: false }
                 },
                 expandAll: false,
                 expandAllP2: false,
