@@ -11,6 +11,8 @@ export const CONFIG = {
 
   // numcat daily_auc 接口
   NUMCAT_DAILY_AUC_URL: 'https://numcat.net/api/reference-proxy/stock/daily_auc',
+  // numcat daily 接口（收盘涨幅 pct_chg）
+  NUMCAT_DAILY_URL: 'https://numcat.net/api/reference-proxy/stock/daily',
   NUMCAT_RECENT_DAYS: 5,
 
   // fuyao snapshot 批量大小

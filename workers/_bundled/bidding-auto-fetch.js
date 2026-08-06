@@ -1,5 +1,5 @@
 // ===== bidding-auto-fetch — 单文件打包版（用于 Cloudflare Dashboard 复制粘贴）=====
-// 生成时间: 2026-08-06 10:42:45
+// 生成时间: 2026-08-06 18:13:40
 // 注意: 此文件由 _bundle-workers.ps1 自动生成，请勿手动编辑
 
 // ────── _shared-source/date-utils.js ──────
@@ -84,6 +84,8 @@ const CONFIG = {
 
   // numcat daily_auc 接口
   NUMCAT_DAILY_AUC_URL: 'https://numcat.net/api/reference-proxy/stock/daily_auc',
+  // numcat daily 接口（收盘涨幅 pct_chg）
+  NUMCAT_DAILY_URL: 'https://numcat.net/api/reference-proxy/stock/daily',
   NUMCAT_RECENT_DAYS: 5,
 
   // fuyao snapshot 批量大小
@@ -310,7 +312,7 @@ async function fetchHistoricalPctChg(env, constituents, historicalDates) {
 }
 
 // ────── bidding-auto-fetch/data/numcat-api.js ──────
-// numcat-api.js — 猫抓 numcat daily_auc 接口
+// numcat-api.js — 猫抓 numcat daily_auc + daily 接口
 
 async function numcatDailyAuc(env, symbols, startDateYMD, endDateYMD) {
   // 【FIX 2026-08-03】改用显式 startdate/enddate（YYYYMMDD），不再用 recentdays
@@ -335,6 +337,31 @@ async function numcatDailyAuc(env, symbols, startDateYMD, endDateYMD) {
   }
   const json = await resp.json();
   if (json.code !== 200) throw new Error('numcat daily_auc 错误: ' + (json.message || JSON.stringify(json)));
+  return json.data;
+}
+
+async function numcatDaily(env, symbols, startDateYMD, endDateYMD) {
+  const body = {
+    apiname: 'daily',
+    apikey: env.NUMCAT_API_KEY,
+    fields: 'symbol,tradedate,pct_chg',
+    params: {
+      symbols: symbols,
+      startdate: startDateYMD,
+      enddate: endDateYMD
+    }
+  };
+  const resp = await fetch(CONFIG.NUMCAT_DAILY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error('numcat daily HTTP ' + resp.status + ': ' + text.slice(0, 200));
+  }
+  const json = await resp.json();
+  if (json.code !== 200) throw new Error('numcat daily 错误: ' + (json.message || JSON.stringify(json)));
   return json.data;
 }
 
@@ -625,47 +652,80 @@ function parseNumcatToMetrics(items, fields, constituents, logs) {
   return { metricsByDate, parsedCount, yestVolDerivedCount };
 }
 
-// 5. fuyao historical 并发抓历史交易日收盘涨幅，覆盖/补齐 numcat 的竞价涨幅
+// 5. numcat daily 获取收盘涨幅（pct_chg），覆盖/补齐 daily_auc 的竞价涨幅
 async function fetchAndMergeHistoricalPct(env, constituents, expectedDates, today, metricsByDate, logs) {
-  // 【FIX 2026-08-03】以"预期交易日"为准，不管 numcat 有没有返回都尝试用 fuyao 兜底 change_pct
+  // 【改为 numcat daily API】替代 fuyao historical，更稳定快速，与前端 fetchFiveDaysAuctionFromNumcat 一致
   const numcatCoveredDates = new Set(Object.keys(metricsByDate));
   const historicalDates = expectedDates.filter(d => d < today).sort();
   const phantomDates = historicalDates.filter(d => !numcatCoveredDates.has(d));
   if (phantomDates.length > 0) {
-    logs.push('⚠️ numcat 完全未返回以下历史交易日（volume/yest_volume 本次无法补齐，change_pct 会尝试用 fuyao historical 兜底）: ' + JSON.stringify(phantomDates));
+    logs.push('⚠️ numcat daily_auc 完全未返回以下历史交易日（volume/yest_volume 本次无法补齐，change_pct 会尝试用 numcat daily 兜底）: ' + JSON.stringify(phantomDates));
   }
-  let histPctStats = null;
-  if (historicalDates.length > 0) {
-    logs.push('步骤5：fuyao historical 并发抓取 ' + historicalDates.length + ' 个历史交易日收盘涨幅...');
-    try {
-      histPctStats = await fetchHistoricalPctChg(env, constituents, historicalDates);
-      logs.push('fuyao historical: 成功 ' + histPctStats.successCount + ' 只, 失败 ' + histPctStats.failCount + ' 只');
-      let mergedCount = 0;
-      let phantomFilledCount = 0;
-      historicalDates.forEach(d => {
-        const pctMap = histPctStats.byDate[d] || {};
-        if (metricsByDate[d]) {
-          metricsByDate[d].forEach(m => {
-            if (pctMap[m.code]) {
-              m.change_pct = pctMap[m.code];
-              mergedCount++;
-            }
-          });
-        } else if (Object.keys(pctMap).length > 0) {
-          metricsByDate[d] = constituents
-            .filter(c => pctMap[c.code])
-            .map(c => ({ stock: c.name, code: c.code, volume: '', yest_volume: '', change_pct: pctMap[c.code] }));
-          phantomFilledCount += metricsByDate[d].length;
-        }
-      });
-      logs.push('历史涨幅合并 ' + mergedCount + ' 条' + (phantomFilledCount > 0 ? '，另外用 fuyao 补齐了 numcat 完全缺失日期的涨幅 ' + phantomFilledCount + ' 条（这些行没有 volume/yest_volume）' : ''));
-    } catch (e) {
-      logs.push('fuyao historical 失败(保留 numcat 竞价涨幅): ' + e.message);
+  if (historicalDates.length === 0) {
+    logs.push('步骤5：无历史交易日，跳过 numcat daily 涨幅获取');
+    return { phantomDates };
+  }
+
+  logs.push('步骤5：numcat daily 获取 ' + historicalDates.length + ' 个历史交易日收盘涨幅...');
+  const startYMD = historicalDates[0].replace(/-/g, '');
+  const endYMD = historicalDates[historicalDates.length - 1].replace(/-/g, '');
+  const symbols = constituents.map(c => c.code).join(',');
+
+  try {
+    const dailyData = await numcatDaily(env, symbols, startYMD, endYMD);
+    const dailyFields = dailyData.fields || [];
+    const dailyItems = dailyData.items || [];
+    const dSymIdx = dailyFields.indexOf('symbol');
+    const dDateIdx = dailyFields.indexOf('tradedate');
+    const dPctIdx = dailyFields.indexOf('pct_chg');
+
+    if (dSymIdx < 0 || dDateIdx < 0 || dPctIdx < 0) {
+      logs.push('numcat daily 返回字段不完整: ' + JSON.stringify(dailyFields) + '，保留 daily_auc 竞价涨幅');
+      return { phantomDates };
     }
-  } else {
-    logs.push('步骤5：无历史交易日，跳过 fuyao historical');
+
+    const pctByDate = {};
+    let totalPctCount = 0;
+    dailyItems.forEach(row => {
+      const code = String(row[dSymIdx] || '').trim();
+      const tradedate = String(row[dDateIdx] || '').trim();
+      const rawPct = row[dPctIdx];
+      if (!code || !tradedate || rawPct === null || rawPct === undefined || rawPct === '') return;
+      const dateStr = compactToDateStr(tradedate);
+      if (!dateStr) return;
+      const n = Number(rawPct);
+      if (isNaN(n)) return;
+      if (!pctByDate[dateStr]) pctByDate[dateStr] = {};
+      pctByDate[dateStr][code] = (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+      totalPctCount++;
+    });
+
+    logs.push('numcat daily 返回 ' + totalPctCount + ' 条涨幅数据，涉及 ' + Object.keys(pctByDate).length + ' 个交易日');
+
+    let mergedCount = 0;
+    let phantomFilledCount = 0;
+    historicalDates.forEach(d => {
+      const pctMap = pctByDate[d] || {};
+      if (metricsByDate[d]) {
+        metricsByDate[d].forEach(m => {
+          if (pctMap[m.code]) {
+            m.change_pct = pctMap[m.code];
+            mergedCount++;
+          }
+        });
+      } else if (Object.keys(pctMap).length > 0) {
+        metricsByDate[d] = constituents
+          .filter(c => pctMap[c.code])
+          .map(c => ({ stock: c.name, code: c.code, volume: '', yest_volume: '', change_pct: pctMap[c.code] }));
+        phantomFilledCount += metricsByDate[d].length;
+      }
+    });
+    logs.push('历史涨幅合并 ' + mergedCount + ' 条' + (phantomFilledCount > 0 ? '，另外用 numcat daily 补齐了 daily_auc 完全缺失日期的涨幅 ' + phantomFilledCount + ' 条（这些行没有 volume/yest_volume）' : ''));
+  } catch (e) {
+    logs.push('numcat daily 失败(保留 daily_auc 竞价涨幅): ' + e.message);
   }
-  return { phantomDates, histPctStats };
+
+  return { phantomDates };
 }
 
 // 6. 分桶写入 market_metrics（按字段形状分桶，配合 missing=default 保留云端原值）

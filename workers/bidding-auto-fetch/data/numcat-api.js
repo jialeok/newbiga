@@ -1,4 +1,4 @@
-// numcat-api.js — 猫抓 numcat daily_auc 接口
+// numcat-api.js — 猫抓 numcat daily_auc + daily 接口
 import { CONFIG } from '../config.js';
 
 export async function numcatDailyAuc(env, symbols, startDateYMD, endDateYMD) {
@@ -24,5 +24,30 @@ export async function numcatDailyAuc(env, symbols, startDateYMD, endDateYMD) {
   }
   const json = await resp.json();
   if (json.code !== 200) throw new Error('numcat daily_auc 错误: ' + (json.message || JSON.stringify(json)));
+  return json.data;
+}
+
+export async function numcatDaily(env, symbols, startDateYMD, endDateYMD) {
+  const body = {
+    apiname: 'daily',
+    apikey: env.NUMCAT_API_KEY,
+    fields: 'symbol,tradedate,pct_chg',
+    params: {
+      symbols: symbols,
+      startdate: startDateYMD,
+      enddate: endDateYMD
+    }
+  };
+  const resp = await fetch(CONFIG.NUMCAT_DAILY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error('numcat daily HTTP ' + resp.status + ': ' + text.slice(0, 200));
+  }
+  const json = await resp.json();
+  if (json.code !== 200) throw new Error('numcat daily 错误: ' + (json.message || JSON.stringify(json)));
   return json.data;
 }
