@@ -244,30 +244,25 @@
                             return a.pos - b.pos; // tier2：保持原相对顺序
                         })
                         .map(x => x.s);
-                } else if (sortByJingYestRatioEnabled2 && parallelStockNames2) {
-                    // "竞/昨占比"独立排序：符合竞昨条件（蓝色高光）的按占比(今/昨比)从高到低排，其余保持原序
+                } else if (sortByJingYestRatioEnabled2) {
+                    // "竞/昨占比"排序：符合竞昨条件(高光)排前面，仅平行达标排中间，都不达标排后面；各档内均按占比从高到低
                     const allRatioDiffInfo2 = window.getRatioDiffInfoForDate(window.currentDate, dataSource);
                     stocksToRender = group.stocks
                         .map((s, pos) => {
                             const name = s.stock ? s.stock.trim() : '';
-                            const isParallel = parallelStockNames2.has(name);
+                            const isParallel = parallelStockNames2 && parallelStockNames2.has(name);
                             const isHighlight = name && jingYestHighlightSet2 && jingYestHighlightSet2.has(name);
                             const tier = isHighlight ? 0 : (isParallel ? 1 : 2);
-                            const fallbackInfo = (tier === 0 || tier === 1) ? allRatioDiffInfo2.get(name) : null;
-                            const diff = fallbackInfo ? fallbackInfo.diff : null;
-                            const jr = fallbackInfo ? fallbackInfo.jingRatio : null;
-                            return { s, pos, diff, jr, tier };
+                            const info = name ? allRatioDiffInfo2.get(name) : null;
+                            const jr = info ? info.jingRatio : null;
+                            return { s, pos, jr, tier };
                         })
                         .sort((a, b) => {
                             if (a.tier !== b.tier) return a.tier - b.tier;
-                            if (a.tier === 0 || a.tier === 1) {
-                                if (a.jr === null && b.jr === null) return a.pos - b.pos;
-                                if (a.jr === null) return 1;
-                                if (b.jr === null) return -1;
-                                if (a.jr !== b.jr) return b.jr - a.jr;
-                                return b.diff - a.diff;
-                            }
-                            return a.pos - b.pos;
+                            if (a.jr === null && b.jr === null) return a.pos - b.pos;
+                            if (a.jr === null) return 1;
+                            if (b.jr === null) return -1;
+                            return b.jr - a.jr;
                         })
                         .map(x => x.s);
                 } else if (sortByParallelEnabled2 && parallelStockNames2) {

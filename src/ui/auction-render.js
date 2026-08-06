@@ -202,22 +202,28 @@
                 const ratioToggle = document.getElementById(_p + 'SortByRatioToggle');
                 const parallelToggle = document.getElementById(_p + 'SortByParallelToggle');
                 const jingYestToggle = document.getElementById(_p + 'SortByJingYestToggle');
+                const jingYestRatioToggle = document.getElementById(_p + 'SortByJingYestRatioToggle');
                 const expandToggle2 = document.getElementById(_p + 'ExpandAllToggle2');
                 const ratioToggle2 = document.getElementById(_p + 'SortByRatioToggle2');
                 const parallelToggle2 = document.getElementById(_p + 'SortByParallelToggle2');
                 const jingYestToggle2 = document.getElementById(_p + 'SortByJingYestToggle2');
+                const jingYestRatioToggle2 = document.getElementById(_p + 'SortByJingYestRatioToggle2');
                 if (expandToggle) expandToggle.checked = false;
                 if (sortToggle) sortToggle.checked = false;
                 if (ratioToggle) ratioToggle.checked = false;
                 if (parallelToggle) parallelToggle.checked = false;
                 if (jingYestToggle) jingYestToggle.checked = false;
+                if (jingYestRatioToggle) jingYestRatioToggle.checked = false;
                 if (expandToggle2) expandToggle2.checked = false;
                 if (ratioToggle2) ratioToggle2.checked = false;
                 if (parallelToggle2) parallelToggle2.checked = false;
                 if (jingYestToggle2) jingYestToggle2.checked = false;
+                if (jingYestRatioToggle2) jingYestRatioToggle2.checked = false;
                 // 重置后重新同步到 store（覆盖开头的旧值）
                 window._syncSortStateToStore(dataSource, 1);
                 window._syncSortStateToStore(dataSource, 2);
+                // [TOGGLE-PERSIST] 切日期重置后持久化全 false，避免刷新恢复旧状态
+                if (typeof window._persistSortToggles === 'function') window._persistSortToggles();
             }
             if (dataSource === 'hot') _lastHotRenderDate = window.currentDate; else _lastAuctionRenderDate = window.currentDate;
             // 日期重置后再次同步容器状态，确保切日期后旧标记容器类也被清掉
@@ -620,26 +626,23 @@
                     })
                     .map(x => x.idx);
             } else if (sortByJingYestRatioEnabled) {
-                // "竞/昨占比"独立排序：符合竞昨条件（蓝色高光）的按占比从高到低，其余保持原序
+                // "竞/昨占比"排序：符合竞昨条件(高光)的按占比从高到低排前面，其余也按占比从高到低排后面；比值无法计算的垫底
                 const allRatioDiffInfo = window.getRatioDiffInfoForDate(window.currentDate, dataSource);
                 renderOrder = renderOrder
                     .map((idx, pos) => {
                         const stockName = auctionList[idx] && auctionList[idx].stock ? auctionList[idx].stock.trim() : '';
                         const isHighlight = stockName && jingYestHighlightSet.has(stockName);
                         const tier = isHighlight ? 0 : 1;
-                        const info = isHighlight ? allRatioDiffInfo.get(stockName) : null;
+                        const info = stockName ? allRatioDiffInfo.get(stockName) : null;
                         const jr = info ? info.jingRatio : null;
                         return { idx, pos, jr, tier };
                     })
                     .sort((a, b) => {
                         if (a.tier !== b.tier) return a.tier - b.tier;
-                        if (a.tier === 0) {
-                            if (a.jr === null && b.jr === null) return a.pos - b.pos;
-                            if (a.jr === null) return 1;
-                            if (b.jr === null) return -1;
-                            return b.jr - a.jr;
-                        }
-                        return a.pos - b.pos;
+                        if (a.jr === null && b.jr === null) return a.pos - b.pos;
+                        if (a.jr === null) return 1;
+                        if (b.jr === null) return -1;
+                        return b.jr - a.jr;
                     })
                     .map(x => x.idx);
             } else if (sortByParallelEnabled) {

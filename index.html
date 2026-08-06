@@ -2092,9 +2092,9 @@
         }
 
         .auction-toolbar {
-            display: flex;
-            flex-wrap: nowrap;
-            justify-content: flex-end;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            justify-items: end;
             align-items: center;
             gap: 4px;
             padding: 8px 8px;
@@ -2104,9 +2104,9 @@
 
         /* 第二行工具栏：放置"竞/昨"等后续新增开关，避免挤压第一行 */
         .auction-toolbar-row2 {
-            display: flex;
-            flex-wrap: nowrap;
-            justify-content: flex-end;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            justify-items: end;
             align-items: center;
             gap: 4px;
             padding: 6px 8px;
@@ -6074,6 +6074,7 @@
                             </div>
                         </div>
                         <div class="auction-toolbar-row2" id="auctionToolbarRow2">
+                            <div></div><div></div>
                             <div class="auction-toggle-item">
                                 <span class="auction-toggle-label">竞/昨</span>
                                 <label class="auction-toggle-switch">
@@ -6099,6 +6100,7 @@
                     </div>
                     <div class="auction-page auction-page-2" id="auctionPage2">
                         <div class="auction-toolbar" id="auctionToolbar2">
+                            <div></div>
                             <div class="auction-toggle-item">
                                 <span class="auction-toggle-label">全部展开</span>
                                 <label class="auction-toggle-switch">
@@ -6122,6 +6124,7 @@
                             </div>
                         </div>
                         <div class="auction-toolbar-row2" id="auctionToolbarRow2_2">
+                            <div></div><div></div>
                             <div class="auction-toggle-item">
                                 <span class="auction-toggle-label">竞/昨</span>
                                 <label class="auction-toggle-switch">
@@ -6187,6 +6190,7 @@
                             </div>
                         </div>
                         <div class="auction-toolbar-row2" id="hotToolbarRow2">
+                            <div></div><div></div>
                             <div class="auction-toggle-item">
                                 <span class="auction-toggle-label">竞/昨</span>
                                 <label class="auction-toggle-switch">
@@ -6212,6 +6216,7 @@
                     </div>
                     <div class="auction-page auction-page-2" id="hotPage2">
                         <div class="auction-toolbar" id="hotToolbar2">
+                            <div></div>
                             <div class="auction-toggle-item">
                                 <span class="auction-toggle-label">全部展开</span>
                                 <label class="auction-toggle-switch">
@@ -6235,6 +6240,7 @@
                             </div>
                         </div>
                         <div class="auction-toolbar-row2" id="hotToolbarRow2_2">
+                            <div></div><div></div>
                             <div class="auction-toggle-item">
                                 <span class="auction-toggle-label">竞/昨</span>
                                 <label class="auction-toggle-switch">
