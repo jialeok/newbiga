@@ -510,8 +510,9 @@ enderMonthlyStats() 调用 getStocksData() 和 loadAllData() 未加 window. 前�
   - **涉及文件**：src/ui/components/boards-vue.js、src/ui/dashboards.js。
 - **猫抓连抓五天 + 9:25 竞价看板空列 + 封单家数显示 0 — Issue #13**：
   - **A. 猫抓手动获取从"连抓三天"改为"连抓五天"**：
-    - 需求：手动补全 5 个交易日（T~T-4）的竞价量 + 成交量，与自动抓取 worker 一致。
-    - 实现：`index.html` 按钮文本改为"连抓五天补全（竞价量+成交量）"，onclick 改为 `fetchFiveDaysAuctionFromNumcat`。`src/logic/app-core.js` 新增该函数：计算 5 个交易日，请求 numcat `daily_auc` 含 `auc_to_pre_vol_pct` 字段，反推成交量 `yestVol = auc_vol / auc_to_pre_vol_pct / 100`，按日期填充 volume + yestVolume + changePct（仅今天），字段级 patch 上报。
+    - 需求：手动补全 5 个交易日（T~T-4）的竞价量 + 成交量，与自动抓取 worker 一致。早盘竞价 tab 和热门股票 tab 都要改。
+    - 实现（早盘竞价）：`index.html` 按钮文本改为"连抓五天补全（竞价量+成交量）"，onclick 改为 `fetchFiveDaysAuctionFromNumcat`。`src/logic/app-core.js` 新增该函数：计算 5 个交易日，请求 numcat `daily_auc` 含 `auc_to_pre_vol_pct` 字段，反推成交量 `yestVol = auc_vol / auc_to_pre_vol_pct / 100`，按日期填充 volume + yestVolume + changePct（仅今天），字段级 patch 上报。
+    - 实现（热门股票）：`index.html` 热门股票 tab 按钮同样改为"连抓五天补全（竞价量+成交量）"，onclick 改为 `fetchFiveDaysHotAuctionFromNumcat`。`src/logic/app-core.js` 新增该函数：与早盘竞价版同结构，但用 `getHotAuctionData`/`patchHotFieldBatch`/`renderHotForm`+`renderHotStocks`/`numcatApiStatusHot`，历史日列表为空时用 `buildYesterdayListFromToday` 造影子列表。
   - **B. 9:25 竞价变化看板空列（同花顺接口）**：
     - 根因：9:25 集合竞价时刻指数/ETF 未开盘（9:30 才开盘），fuyao/腾讯接口返回 null → `bidding-calc.js` 返回 `value: null` → `bidding-workflow.js` 跳过 null 不写入 time930 列。只有"最近多板%"（883410 成分股有集合竞价撮合价）有数据。
     - 修复：`bidding-calc.js` 所有 `value: null` 兜底改为 `value: '0'` 或 `value: '0.00'`（ROW_SECTOR_ETF/ROW_TOP10 用 '0'，ROW_BIG_ETF/ROW_MAIN_INDEX 用 '0.00'），确保 9:25 各列都有值写入。
