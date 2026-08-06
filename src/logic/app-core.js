@@ -4096,6 +4096,157 @@
             });
         }
 
+        // ---------- 猫抓：连抓五天补全（竞价量+成交量反推，一次请求，纯补全不覆盖） ----------
+        export async function fetchFiveDaysAuctionFromNumcat(btn) {
+            window.setBtnLoading(btn, true);
+            try {
+                const today = currentDate;
+                const dates = [today];
+                let d = today;
+                for (let i = 0; i < 4; i++) {
+                    d = window.getPreviousTradingDay(d);
+                    if (!d) break;
+                    dates.push(d);
+                }
+                if (dates.length < 2) {
+                    window.setApiStatus('numcatApiStatus', '❌ 无法确定足够的历史交易日', false);
+                    return;
+                }
+                const auctionData = window.getAuctionData();
+                const todayList = (auctionData[today] || []).slice();
+                if (todayList.length === 0) {
+                    window.setApiStatus('numcatApiStatus', '❌ 当日列表为空，请先导入股票到表格', false);
+                    return;
+                }
+                let scMap = window._scMapCache || {};
+                if (Object.keys(scMap).length === 0 && typeof window.loadCloudStockCodeMap === 'function') {
+                    try { await window.loadCloudStockCodeMap(); } catch (e) {}
+                    scMap = window._scMapCache || {};
+                }
+                const allCodesSet = new Set();
+                todayList.forEach(function(s) {
+                    if (!s || !s.stock) return;
+                    const code = (s.code || scMap[s.stock.trim()] || '').trim();
+                    if (code) allCodesSet.add(code);
+                });
+                if (allCodesSet.size === 0) {
+                    window.setApiStatus('numcatApiStatus', '❌ 没有可补全的股票（缺代码映射，请先导入代码映射）', false);
+                    return;
+                }
+                const symbols = Array.from(allCodesSet).join(',');
+                const startYMD = dates[dates.length - 1].replace(/-/g, '');
+                const endYMD = dates[0].replace(/-/g, '');
+                const params = { symbols: symbols, startdate: startYMD, enddate: endYMD };
+                window.setApiStatus('numcatApiStatus', '正在请求猫抓接口（' + allCodesSet.size + ' 只股票，连抓' + dates.length + '天，竞价量+成交量反推）...', true);
+                const fields = 'symbol,name,tradedate,auc_vol,auc_pct_chg,auc_to_pre_vol_pct';
+                const result = await window.numcatApiPost('daily_auc', fields, params);
+                const fieldList = result.fields || [];
+                const items = result.items || [];
+                const symbolIdx = fieldList.indexOf('symbol');
+                const tradedateIdx = fieldList.indexOf('tradedate');
+                const aucVolIdx = fieldList.indexOf('auc_vol');
+                const aucPctIdx = fieldList.indexOf('auc_pct_chg');
+                const ratioIdx = fieldList.indexOf('auc_to_pre_vol_pct');
+                if (symbolIdx < 0 || tradedateIdx < 0 || aucVolIdx < 0) {
+                    window.setApiStatus('numcatApiStatus', '❌ 返回数据字段不完整', false);
+                    return;
+                }
+                const aucByDate = {};
+                items.forEach(function(row) {
+                    const code = String(row[symbolIdx] || '').trim();
+                    const tradedate = String(row[tradedateIdx] || '').trim();
+                    const aucVol = row[aucVolIdx];
+                    if (!code || !tradedate || aucVol === null || aucVol === undefined) return;
+                    if (!aucByDate[tradedate]) aucByDate[tradedate] = {};
+                    const volNum = Number(aucVol);
+                    const entry = { vol: isNaN(volNum) ? '' : String(Math.round(volNum / 100)) };
+                    if (ratioIdx >= 0) {
+                        const ratio = row[ratioIdx];
+                        if (ratio !== null && ratio !== undefined && ratio !== '') {
+                            const r = Number(ratio);
+                            if (!isNaN(r) && r > 0 && volNum > 0) {
+                                entry.yestVol = String(Math.round(volNum / r / 100));
+                            }
+                        }
+                    }
+                    if (aucPctIdx >= 0) {
+                        const rawPct = row[aucPctIdx];
+                        if (rawPct !== null && rawPct !== undefined && rawPct !== '') {
+                            const n = Number(rawPct);
+                            if (!isNaN(n)) entry.pct = (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+                        }
+                    }
+                    aucByDate[tradedate][code] = entry;
+                });
+                let filledVolCount = 0, filledYestVolCount = 0, filledPctCount = 0, skippedCount = 0;
+                const patchesByDate = {};
+                dates.forEach(function(dateStr) {
+                    const ymd = dateStr.replace(/-/g, '');
+                    const dayData = aucByDate[ymd] || {};
+                    let dayList = (auctionData[dateStr] || []).slice();
+                    const existingNames = {};
+                    dayList.forEach(function(s) { if (s && s.stock) existingNames[s.stock.trim()] = true; });
+                    todayList.forEach(function(s) {
+                        if (s && s.stock && !existingNames[s.stock.trim()]) {
+                            dayList.push(Object.assign({}, s, { volume: '', yestVolume: '', changePct: '' }));
+                        }
+                    });
+                    const patches = [];
+                    dayList.forEach(function(s) {
+                        if (!s || !s.stock) return;
+                        const code = (s.code || scMap[s.stock.trim()] || '').trim();
+                        if (!code || !dayData[code]) { skippedCount++; return; }
+                        const entry = dayData[code];
+                        let changed = false;
+                        const patch = { stock: s.stock };
+                        if (entry.vol && window.getNumericVolume(s.volume) === null) {
+                            s.volume = entry.vol;
+                            patch.volume = s.volume;
+                            filledVolCount++;
+                            changed = true;
+                        }
+                        if (entry.yestVol && !((s.yestVolume || '').trim())) {
+                            s.yestVolume = entry.yestVol;
+                            patch.yest_volume = s.yestVolume;
+                            filledYestVolCount++;
+                            changed = true;
+                        }
+                        if (dateStr === today && entry.pct && !((s.changePct || '').trim())) {
+                            s.changePct = entry.pct;
+                            s.note = window.buildNoteFromFields(s.changePct, s.topics);
+                            patch.change_pct = s.changePct;
+                            patch.note = s.note;
+                            filledPctCount++;
+                            changed = true;
+                        }
+                        if (changed) patches.push(patch);
+                    });
+                    auctionData[dateStr] = dayList;
+                    if (patches.length > 0) patchesByDate[dateStr] = patches;
+                });
+                window.invalidateTopicCache();
+                Object.keys(patchesByDate).forEach(function(dateStr) {
+                    window.patchAuctionFieldBatch(dateStr, patchesByDate[dateStr]).catch(function(e) {
+                        window._dbgLog('[AUCTION-ERR] patchAuctionFieldBatch ' + dateStr + ' ' + (e && e.message || e));
+                    });
+                });
+                window.renderAuctionForm();
+                window.renderAuction();
+                window.renderList();
+                const patchCounts = dates.map(function(d) { return (patchesByDate[d] || []).length; });
+                const resultText = '✅ 连抓' + dates.length + '天完成：竞价量+' + filledVolCount + ' / 昨日成交量(反推)+' + filledYestVolCount + ' / 涨幅+' + filledPctCount +
+                    '（各日只数：' + patchCounts.join('/') + '），跳过 ' + skippedCount + ' 只无数据';
+                window.setApiStatus('numcatApiStatus', resultText, true);
+            } catch (err) {
+                console.error('fetchFiveDaysAuctionFromNumcat 失败:', err);
+                let msg = err && err.message ? err.message : '获取失败';
+                if (msg.indexOf('Failed to fetch') >= 0) msg = '代理请求失败，请确认 numcat-proxy Edge Function 已部署';
+                window.setApiStatus('numcatApiStatus', '❌ ' + msg, false);
+            } finally {
+                window.setBtnLoading(btn, false);
+            }
+        }
+
         // ---------- 猫抓：补全题材（开盘啦，只填 topics 为空的股票） ----------
         export async function fillTopicsFromNumcat(btn) {
             window.setBtnLoading(btn, true);

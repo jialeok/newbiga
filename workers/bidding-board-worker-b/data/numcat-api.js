@@ -1,6 +1,6 @@
 // data/numcat-api.js — NumCat 情绪周期接口
 import { CONFIG } from '../config.js';
-import { normalizeDate } from '../../_shared-source/date-utils.js';
+import { normalizeDate, beijingToday } from '../../_shared-source/date-utils.js';
 
 export async function fetchNumCatEmotionFull(env) {
   const resp = await fetch(CONFIG.NUMCAT_URL, {
@@ -29,11 +29,14 @@ export async function fetchNumCatEmotionFull(env) {
 export async function numcatEmoindic(env) {
   const { fields, items } = await fetchNumCatEmotionFull(env);
   const latest = findTodayItem(fields, items);
-  const sealIdx = fields.indexOf(CONFIG.SEAL_FIELD);
-  if (sealIdx < 0) {
-    throw new Error('NumCat 情绪周期接口缺少字段 "' + CONFIG.SEAL_FIELD + '"，可用字段: ' + fields.join(', '));
+  if (!latest) {
+    throw new Error('NumCat 情绪周期接口未找到今日数据，可用日期字段: ' + fields.join(', '));
   }
-  return { sealCount: Number(latest[sealIdx]), availableFields: fields };
+  const sealCount = pickEmotionValue(fields, latest, CONFIG.SEAL_FIELD_CANDIDATES);
+  if (sealCount === null) {
+    throw new Error('NumCat 封单家数字段全部缺失，候选: ' + CONFIG.SEAL_FIELD_CANDIDATES.join(', ') + '，可用字段: ' + fields.join(', '));
+  }
+  return { sealCount: sealCount, availableFields: fields };
 }
 
 export function pickEmotionValue(fields, item, candidates) {
@@ -69,7 +72,16 @@ export function findLatestItemIndex(fields, items) {
 
 export function findTodayItem(fields, items) {
   const sorted = sortItemsByDate(fields, items);
-  return sorted[sorted.length - 1];
+  if (sorted.length === 0) return null;
+  const dateField = findDateField(fields);
+  if (!dateField) return sorted[sorted.length - 1];
+  const idx = fields.indexOf(dateField);
+  const today = beijingToday();
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const itemDate = normalizeDate(sorted[i][idx]);
+    if (itemDate === today) return sorted[i];
+  }
+  return null;
 }
 
 export function buildJiwangStats(fields, items) {

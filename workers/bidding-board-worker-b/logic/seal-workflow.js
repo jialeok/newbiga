@@ -18,8 +18,8 @@ export async function runSeal(env, source) {
   try {
     const numcat = await numcatEmoindic(env);
     const seal = numcat.sealCount;
-    if (isNaN(seal)) {
-      sealResult = { value: null, error: 'NumCat 封单家数字段 "' + CONFIG.SEAL_FIELD + '" 不是数字，可用字段: ' + numcat.availableFields.join(', ') };
+    if (seal === null || isNaN(seal)) {
+      sealResult = { value: null, error: 'NumCat 封单家数字段全部缺失，候选: ' + CONFIG.SEAL_FIELD_CANDIDATES.join(', ') + '，可用字段: ' + numcat.availableFields.join(', ') };
     } else {
       sealResult = { value: String(Math.round(seal)) };
     }

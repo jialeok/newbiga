@@ -8,7 +8,7 @@ export const CONFIG = {
   NUMCAT_URL: 'https://numcat.net/api/reference-proxy/market/emoindic-daily',
   NUMCAT_APINAME: 'emoindic_daily',
   NUMCAT_RECENT_DAYS: 10,
-  SEAL_FIELD: 'owfd_0925_count',
+  SEAL_FIELD_CANDIDATES: ['owfd_0925_count', 'owfd_0925', 'seal_count_0925', 'fengdan_0925', 'fdjs_0925', 's_seal', 'seal_count'],
 
   EMOTION_FIELDS: {
     amount:        ['am', 'amount', 's_amount', 'total_amount', 's7', 's_amt'],

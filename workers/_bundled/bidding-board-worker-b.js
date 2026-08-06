@@ -1,5 +1,5 @@
 // ===== bidding-board-worker-b — 单文件打包版（用于 Cloudflare Dashboard 复制粘贴）=====
-// 生成时间: 2026-08-05 20:32:30
+// 生成时间: 2026-08-06 10:42:45
 // 注意: 此文件由 _bundle-workers.ps1 自动生成，请勿手动编辑
 
 // ────── bidding-board-worker-b/config.js ──────
@@ -13,7 +13,7 @@ const CONFIG = {
   NUMCAT_URL: 'https://numcat.net/api/reference-proxy/market/emoindic-daily',
   NUMCAT_APINAME: 'emoindic_daily',
   NUMCAT_RECENT_DAYS: 10,
-  SEAL_FIELD: 'owfd_0925_count',
+  SEAL_FIELD_CANDIDATES: ['owfd_0925_count', 'owfd_0925', 'seal_count_0925', 'fengdan_0925', 'fdjs_0925', 's_seal', 'seal_count'],
 
   EMOTION_FIELDS: {
     amount:        ['am', 'amount', 's_amount', 'total_amount', 's7', 's_amt'],
@@ -192,11 +192,14 @@ async function fetchNumCatEmotionFull(env) {
 async function numcatEmoindic(env) {
   const { fields, items } = await fetchNumCatEmotionFull(env);
   const latest = findTodayItem(fields, items);
-  const sealIdx = fields.indexOf(CONFIG.SEAL_FIELD);
-  if (sealIdx < 0) {
-    throw new Error('NumCat 情绪周期接口缺少字段 "' + CONFIG.SEAL_FIELD + '"，可用字段: ' + fields.join(', '));
+  if (!latest) {
+    throw new Error('NumCat 情绪周期接口未找到今日数据，可用日期字段: ' + fields.join(', '));
   }
-  return { sealCount: Number(latest[sealIdx]), availableFields: fields };
+  const sealCount = pickEmotionValue(fields, latest, CONFIG.SEAL_FIELD_CANDIDATES);
+  if (sealCount === null) {
+    throw new Error('NumCat 封单家数字段全部缺失，候选: ' + CONFIG.SEAL_FIELD_CANDIDATES.join(', ') + '，可用字段: ' + fields.join(', '));
+  }
+  return { sealCount: sealCount, availableFields: fields };
 }
 
 function pickEmotionValue(fields, item, candidates) {
@@ -232,7 +235,16 @@ function findLatestItemIndex(fields, items) {
 
 function findTodayItem(fields, items) {
   const sorted = sortItemsByDate(fields, items);
-  return sorted[sorted.length - 1];
+  if (sorted.length === 0) return null;
+  const dateField = findDateField(fields);
+  if (!dateField) return sorted[sorted.length - 1];
+  const idx = fields.indexOf(dateField);
+  const today = beijingToday();
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const itemDate = normalizeDate(sorted[i][idx]);
+    if (itemDate === today) return sorted[i];
+  }
+  return null;
 }
 
 function buildJiwangStats(fields, items) {
@@ -315,8 +327,8 @@ async function runSeal(env, source) {
   try {
     const numcat = await numcatEmoindic(env);
     const seal = numcat.sealCount;
-    if (isNaN(seal)) {
-      sealResult = { value: null, error: 'NumCat 封单家数字段 "' + CONFIG.SEAL_FIELD + '" 不是数字，可用字段: ' + numcat.availableFields.join(', ') };
+    if (seal === null || isNaN(seal)) {
+      sealResult = { value: null, error: 'NumCat 封单家数字段全部缺失，候选: ' + CONFIG.SEAL_FIELD_CANDIDATES.join(', ') + '，可用字段: ' + numcat.availableFields.join(', ') };
     } else {
       sealResult = { value: String(Math.round(seal)) };
     }

@@ -1,5 +1,5 @@
 // ===== bidding-board-worker-a — 单文件打包版（用于 Cloudflare Dashboard 复制粘贴）=====
-// 生成时间: 2026-08-05 20:32:30
+// 生成时间: 2026-08-06 10:42:45
 // 注意: 此文件由 _bundle-workers.ps1 自动生成，请勿手动编辑
 
 // ────── bidding-board-worker-a/config.js ──────
@@ -331,35 +331,35 @@ async function computeBiddingRows(env, point) {
       else missing.push(e.name);
     });
     rows[CONFIG.ROW_SECTOR_ETF] = { value: String(red), missing: missing.length ? missing : undefined };
-  } catch (e) { rows[CONFIG.ROW_SECTOR_ETF] = { value: null, error: e.message }; }
+  } catch (e) { rows[CONFIG.ROW_SECTOR_ETF] = { value: '0', error: e.message }; }
 
   try {
     const codes = await getConstituentThscodes(env, CONFIG.TOP10_INDEX);
-    if (codes.length === 0) rows[CONFIG.ROW_TOP10] = { value: null, error: '883901 成分股为空' };
+    if (codes.length === 0) rows[CONFIG.ROW_TOP10] = { value: '0', error: '883901 成分股为空' };
     else {
       const pcts = await getStockSnapshotPcts(env, codes);
       let red = 0, have = 0;
       codes.forEach(c => { const v = pcts[c]; if (typeof v === 'number' && !isNaN(v)) { have++; if (v > 0) red++; } });
       rows[CONFIG.ROW_TOP10] = have === 0
-        ? { value: null, error: '883901 成分股快照全部缺失(' + codes.length + '只)' }
+        ? { value: '0', error: '883901 成分股快照全部缺失(' + codes.length + '只)' }
         : { value: String(red), missing: codes.length - have > 0 ? [String(codes.length - have) + '只无快照'] : undefined };
     }
-  } catch (e) { rows[CONFIG.ROW_TOP10] = { value: null, error: e.message }; }
+  } catch (e) { rows[CONFIG.ROW_TOP10] = { value: '0', error: e.message }; }
 
   try {
     const pcts = await getTencentSnapshotPcts(CONFIG.BIG_ETFS);
     const vals = CONFIG.BIG_ETFS.map(c => pcts[c]).filter(v => typeof v === 'number' && !isNaN(v));
     const avg = avgOf(vals);
     rows[CONFIG.ROW_BIG_ETF] = avg === null
-      ? { value: null, error: '大盘ETF快照全部缺失' }
+      ? { value: '0.00', error: '大盘ETF快照全部缺失' }
       : { value: fmtPct(avg), missing: CONFIG.BIG_ETFS.length - vals.length > 0 ? [String(CONFIG.BIG_ETFS.length - vals.length) + '只无快照'] : undefined };
-  } catch (e) { rows[CONFIG.ROW_BIG_ETF] = { value: null, error: e.message }; }
+  } catch (e) { rows[CONFIG.ROW_BIG_ETF] = { value: '0.00', error: e.message }; }
 
   try {
     const pcts = await getIndexSnapshotPcts(env, [CONFIG.MAIN_INDEX]);
     const v = pcts[CONFIG.MAIN_INDEX];
-    rows[CONFIG.ROW_MAIN_INDEX] = (typeof v === 'number' && !isNaN(v)) ? { value: fmtPct(v) } : { value: null, error: '上证指数快照缺失' };
-  } catch (e) { rows[CONFIG.ROW_MAIN_INDEX] = { value: null, error: e.message }; }
+    rows[CONFIG.ROW_MAIN_INDEX] = (typeof v === 'number' && !isNaN(v)) ? { value: fmtPct(v) } : { value: '0.00', error: '上证指数快照缺失' };
+  } catch (e) { rows[CONFIG.ROW_MAIN_INDEX] = { value: '0.00', error: e.message }; }
 
   return rows;
 }
