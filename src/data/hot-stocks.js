@@ -565,6 +565,14 @@
                         if (error.message && error.message.indexOf('relation') >= 0) {
                             window._hotTrendsTableAvailable = false;
                         }
+                        // [BUG-FIX] hot_stock_trends 是旧表（已被 market_metrics scope=hot 替代），
+                        // RLS 策略可能不允许前端 anon key 写入。数据已通过 patchHotFieldBatch 写入 market_metrics，
+                        // 本地 _hotTrendsCache 也已更新，此处 RLS 失败不影响功能，静默跳过即可。
+                        if (error.message && error.message.indexOf('row-level security policy') >= 0) {
+                            console.warn('[HOT-TRENDS] hot_stock_trends RLS 策略拒绝写入（旧表已废弃，market_metrics 为主数据源），已跳过');
+                            window._hotTrendsTableAvailable = false;
+                            break;
+                        }
                         throw error;
                     }
                 }
