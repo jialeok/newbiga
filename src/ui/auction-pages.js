@@ -57,10 +57,10 @@
             const sortByRatioEnabled2 = document.getElementById(_p + 'SortByRatioToggle2')?.checked;
             // 是否开启"平行"（分组内部把 今日竞价量>T-1竞价量 且 T-1成交量>T-2成交量 的股票排最前面）
             const sortByParallelEnabled2 = document.getElementById(_p + 'SortByParallelToggle2')?.checked;
-            const parallelStockNames2 = (sortByParallelEnabled2 || sortByJingYestRatioEnabled2) ? window.getParallelStocksForDate(window.currentDate, dataSource) : null;
             // 是否开启"竞/昨"（在平行基础上，进一步要求 今/昨比 > 昨/前比）；集合本身不依赖开关，随时计算以便"竞/昨数"常驻显示
             const sortByJingYestEnabled2 = document.getElementById(_p + 'SortByJingYestToggle2')?.checked;
             const sortByJingYestRatioEnabled2 = document.getElementById(_p + 'SortByJingYestRatioToggle2')?.checked;
+            const parallelStockNames2 = (sortByParallelEnabled2 || sortByJingYestRatioEnabled2) ? window.getParallelStocksForDate(window.currentDate, dataSource) : null;
             // "竞/昨"高光：统一用 getJingYestHighlightSetForDate（含 digitGap≤1 过滤），与第一页/排序 tier0 口径一致
             const jingYestHighlightSet2 = window.getJingYestHighlightSetForDate(window.currentDate, dataSource);
             // 若"竞/昨"（第二页）开启且高光子集为空，弹一次警示Toast；用同一个防抖标记避免与第一页同一时刻重复弹出
