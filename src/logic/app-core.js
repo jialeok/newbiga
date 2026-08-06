@@ -4216,7 +4216,7 @@
                             filledVolCount++;
                             changed = true;
                         }
-                        if (entry.yestVol && !((s.yestVolume || '').trim())) {
+                        if (entry.yestVol) {
                             s.yestVolume = entry.yestVol;
                             patch.yest_volume = s.yestVolume;
                             filledYestVolCount++;
@@ -6125,7 +6125,7 @@
                             filledVolCount++;
                             changed = true;
                         }
-                        if (entry.yestVol && !((s.yestVolume || '').trim())) {
+                        if (entry.yestVol) {
                             s.yestVolume = entry.yestVol;
                             patch.yest_volume = s.yestVolume;
                             filledYestVolCount++;

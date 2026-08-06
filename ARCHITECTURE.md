@@ -522,3 +522,11 @@ enderMonthlyStats() 调用 getStocksData() 和 loadAllData() 未加 window. 前�
     - 根因：① `CONFIG.SEAL_FIELD: 'owfd_0925_count'` 单字段名精确匹配，numcat 接口字段名不稳定可能已改名；② `Number(null/'') === 0` 被当成 0 显示而非空；③ `findTodayItem` 取排序末行不校验是否为今天。
     - 修复：① `config.js` 改为候选列表 `SEAL_FIELD_CANDIDATES: ['owfd_0925_count', 'owfd_0925', 'seal_count_0925', 'fengdan_0925', 'fdjs_0925', 's_seal', 'seal_count']`；② `numcat-api.js` 的 `numcatEmoindic` 用 `pickEmotionValue` 遍历候选字段并跳过 null/undefined/空字符串；③ `findTodayItem` 用 `beijingToday()` 校验返回行日期是否为今天，找不到返回 null；④ `seal-workflow.js` sealCount 为 null 时不显示 0。
   - **涉及文件**：index.html、src/logic/app-core.js、src/ui/auction-render.js、src/ui/components/auction-components.js、workers/bidding-board-worker-a/logic/bidding-calc.js、workers/bidding-board-worker-b/config.js、workers/bidding-board-worker-b/data/numcat-api.js、workers/bidding-board-worker-b/logic/seal-workflow.js、workers/_bundled/*.js。
+- **当天昨成交量覆盖 + 情绪看板跌停趋势调试 — Issue #13 续**：
+  - **A. 连抓五天当天昨成交量未更新**：
+    - 根因：`fetchFiveDaysAuctionFromNumcat` / `fetchFiveDaysHotAuctionFromNumcat` 的 yestVolume 填充用补全模式 `if (entry.yestVol && !((s.yestVolume || '').trim()))`，当天已有旧值（错误单位）则跳过不覆盖。
+    - 修复：改为覆盖模式 `if (entry.yestVol)`，始终用 API 值覆盖，确保当天和前四天都用正确的反推值。
+  - **B. 情绪看板昨日跌停家数趋势图调试**：
+    - 现状：`EMOTION_ROW_CONFIG` 中 `limitDown` 行已设置 `hasTrend: true`，数据库 `five_days` 中 `limitDown` 有值（74,0,0,0,1），代码配置正确。
+    - 改进：`renderEmotionBoard` 的 console.log 从仅打印 `limitUp` 扩展为打印所有情绪字段（limitUp/limitDown/onceLimit/highestLb/zhaban），并标注 data 是否加载成功，便于排查"暂无趋势数据"根因。
+  - **涉及文件**：src/logic/app-core.js、src/ui/boards-emotion.js。

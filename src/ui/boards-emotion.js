@@ -143,7 +143,7 @@
 
             const metrics = (data && data.metrics) || {};
             const fiveDays = (data && data.five_days) || [];
-            console.log('[EMOTION-DEBUG] five_days count:', fiveDays.length, 'rows:', fiveDays.map(function (d) { return { date: d._date, limitUp: d.limitUp }; }));
+            console.log('[EMOTION-DEBUG] data:', data ? 'loaded' : 'null', 'five_days count:', fiveDays.length, 'rows:', fiveDays.map(function (d) { return { date: d._date, limitUp: d.limitUp, limitDown: d.limitDown, onceLimit: d.onceLimit, highestLb: d.highestLb, zhaban: d.zhaban }; }));
 
             // 标题摘要：涨停/跌停/最高连板
             const up = metrics.limitUp, down = metrics.limitDown, lb = metrics.highestLb;
