@@ -3306,6 +3306,73 @@
             }
         }
 
+        // [TOGGLE-PERSIST] 排序开关持久化：刷新后恢复勾选状态，使排序立即生效。
+        // 按架构规范属 UI 层（读写 DOM checkbox + localStorage，toggle 为 UI 状态）。
+        const _SORT_TOGGLE_KEY = 'auctionSortToggles_v1';
+        const _SORT_TOGGLE_IDS = {
+            auction: {
+                p1: ['auctionSortByDataToggle', 'auctionSortByRatioToggle', 'auctionSortByParallelToggle', 'auctionSortByJingYestToggle', 'auctionSortByJingYestRatioToggle'],
+                p2: ['auctionSortByRatioToggle2', 'auctionSortByParallelToggle2', 'auctionSortByJingYestToggle2', 'auctionSortByJingYestRatioToggle2']
+            },
+            hot: {
+                p1: ['hotSortByDataToggle', 'hotSortByRatioToggle', 'hotSortByParallelToggle', 'hotSortByJingYestToggle', 'hotSortByJingYestRatioToggle'],
+                p2: ['hotSortByRatioToggle2', 'hotSortByParallelToggle2', 'hotSortByJingYestToggle2', 'hotSortByJingYestRatioToggle2']
+            }
+        };
+
+        export function _persistSortToggles() {
+            try {
+                const data = {};
+                for (const scope of ['auction', 'hot']) {
+                    data[scope] = {};
+                    for (const page of ['p1', 'p2']) {
+                        data[scope][page] = {};
+                        for (const id of _SORT_TOGGLE_IDS[scope][page]) {
+                            const el = document.getElementById(id);
+                            if (el) data[scope][page][id] = el.checked;
+                        }
+                    }
+                }
+                localStorage.setItem(_SORT_TOGGLE_KEY, JSON.stringify(data));
+            } catch (e) {}
+        }
+
+        // 启动时恢复：设 DOM checkbox → 同步 store → 更新容器高亮。返回是否有任一开关被恢复。
+        export function _restoreAndApplySortToggles() {
+            try {
+                const raw = localStorage.getItem(_SORT_TOGGLE_KEY);
+                if (!raw) return false;
+                const data = JSON.parse(raw);
+                let any = false;
+                for (const scope of ['auction', 'hot']) {
+                    for (const page of ['p1', 'p2']) {
+                        const pageData = data[scope] && data[scope][page];
+                        if (!pageData) continue;
+                        for (const id of _SORT_TOGGLE_IDS[scope][page]) {
+                            const el = document.getElementById(id);
+                            if (el && typeof pageData[id] === 'boolean' && pageData[id]) {
+                                el.checked = true;
+                                any = true;
+                            }
+                        }
+                    }
+                }
+                if (any) {
+                    if (typeof window._syncSortStateToStore === 'function') {
+                        window._syncSortStateToStore('auction', 1);
+                        window._syncSortStateToStore('auction', 2);
+                        window._syncSortStateToStore('hot', 1);
+                        window._syncSortStateToStore('hot', 2);
+                    }
+                    if (typeof window._updateAuctionHighlightContainerState === 'function') {
+                        window._updateAuctionHighlightContainerState('auction');
+                        window._updateAuctionHighlightContainerState('hot');
+                    }
+                }
+                return any;
+            } catch (e) { return false; }
+        }
+
         // 第二页"全部展开"开关变化时的处理
         export function onAuctionExpandAllToggle2Change() {
             const checked = document.getElementById('auctionExpandAllToggle2').checked;
@@ -3421,6 +3488,8 @@
             // class 与组内排序都不生效（Vue 未挂载，无响应式重算，仅靠本函数时
             // 界面毫无变化）。现补上真正的行重渲染（innerHTML 路径是当前激活路径）。
             if (typeof window.renderAuction === 'function') window.renderAuction(dataSource);
+            // [TOGGLE-PERSIST] 开关变化后持久化，刷新后可恢复
+            if (typeof window._persistSortToggles === 'function') window._persistSortToggles();
         }
 
         export function _refreshAuctionPage2OnToggle(dataSource) {
@@ -3428,6 +3497,8 @@
             window._updateAuctionHighlightContainerState(dataSource);
             // [BUG-FIX] 同上：补上行重渲染，使竞/昨/平行/环比的排序与高亮真正生效。
             if (typeof window.renderAuctionPage2 === 'function') window.renderAuctionPage2(dataSource);
+            // [TOGGLE-PERSIST] 开关变化后持久化，刷新后可恢复
+            if (typeof window._persistSortToggles === 'function') window._persistSortToggles();
         }
 
         export function onAuctionSortByJingYestToggle2Change() {

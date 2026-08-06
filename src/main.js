@@ -31,6 +31,11 @@
                 window.startSessionPoll();
                 document.getElementById('passwordOverlay').style.display = 'none';
                 window._appInit();
+                // [TOGGLE-PERSIST] 恢复排序开关勾选状态（在任何 renderAuction 之前），
+                // 使刷新后开启的 toggle 立即生效（排序/高光）。后续 renderAuction 会读到恢复后的 DOM checkbox。
+                if (typeof window._restoreAndApplySortToggles === 'function') {
+                    window._restoreAndApplySortToggles();
+                }
                 // 刷新场景：先快速加载 highlights 缓存（小表，秒开），立即刷新竞/昨显示
                 window.pullDailyHighlights().then(function() {
                     window.renderAuction();
