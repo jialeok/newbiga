@@ -660,7 +660,7 @@
             { key: 'highestLb', title: '昨日最高连板天数', unit: '天', hasTrend: true, field: 'highestLb' },
             { key: 'limitUp', title: '昨日涨停家数', unit: '家', hasTrend: true, field: 'limitUp' },
             { key: 'limitDown', title: '昨日跌停家数', unit: '家', hasTrend: true, field: 'limitDown' },
-            { key: 'zhaban', title: '昨日炸板家数', unit: '家', hasTrend: false, field: 'zhaban', extraKey: 'zhabanRate', extraUnit: '%' }
+            { key: 'zhaban', title: '昨日炸板家数', unit: '家', hasTrend: true, field: 'zhaban', extraKey: 'zhabanRate', extraUnit: '%' }
         ];
 
 
