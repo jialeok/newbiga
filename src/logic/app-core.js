@@ -4344,13 +4344,14 @@
                     }
                     // 全部保留题材，不再截断为前3个（一只股票可能同时属于多个题材分类）
                     // [BUG-FIX 2026-07-26] 过滤掉开盘啦返回的"题材35/题材36"等编号条目
-                    const topicList = themeNames.split(/[，、,;；]/).map(function(t) { return t.trim(); }).filter(function(t) {
+                    // [BUG-FIX] 规范化去重：防止同一只股票写入重复/变体题材
+                    const topicList = [...new Set(themeNames.split(/[，、,;；]/).map(function(t) { return t.trim(); }).filter(function(t) {
                         if (!t) return false;
                         if (/^题材\d+$/.test(t)) return false;   // 题材35 / 题材36
                         if (/^\d+$/.test(t)) return false;     // 纯数字
                         if (t.length < 2) return false;        // 单字符
                         return true;
-                    });
+                    }))];
                     if (topicList.length === 0) {
                         skippedCount++;
                         return;
@@ -6985,13 +6986,14 @@
                     }
                     // 全部保留题材，不再截断为前3个（一只股票可能同时属于多个题材分类）
                     // [BUG-FIX 2026-07-26] 过滤掉开盘啦返回的"题材35/题材36"等编号条目
-                    const topicList = themeNames.split(/[，、,;；]/).map(function(t) { return t.trim(); }).filter(function(t) {
+                    // [BUG-FIX] 规范化去重：防止同一只股票写入重复/变体题材
+                    const topicList = [...new Set(themeNames.split(/[，、,;；]/).map(function(t) { return t.trim(); }).filter(function(t) {
                         if (!t) return false;
                         if (/^题材\d+$/.test(t)) return false;   // 题材35 / 题材36
                         if (/^\d+$/.test(t)) return false;     // 纯数字
                         if (t.length < 2) return false;        // 单字符
                         return true;
-                    });
+                    }))];
                     if (topicList.length === 0) {
                         skippedCount++;
                         return;

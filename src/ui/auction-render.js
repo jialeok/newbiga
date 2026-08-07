@@ -1256,7 +1256,15 @@
                 if (t === '---' || t === '其它' || t === '其他') return false;
                 return true;
             });
-            return topics;
+            // [BUG-FIX] 规范化去重：去所有空格+转小写作比较 key，保留首次出现的原始值
+            // 防止 "AI芯片" 与 "AI 芯片" 等变体重复显示
+            var _seen = new Set();
+            var _deduped = [];
+            topics.forEach(function(t) {
+                var key = t.replace(/\s+/g, '').toLowerCase();
+                if (!_seen.has(key)) { _seen.add(key); _deduped.push(t); }
+            });
+            return _deduped;
         }
 
         // 默认核心词库（与主程序数据备份_20260709_1031.json 同步，共 34 个）
