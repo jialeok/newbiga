@@ -117,14 +117,14 @@
                     const name = item.stock.trim();
                     if (!window._topicCache[name]) window._topicCache[name] = new Set();
                     if (item.topics) {
-                        item.topics.split(/[,，、;；]/).forEach(t => {
+                        item.topics.split(/[+，,，、;；]/).forEach(t => {
                             t = t.trim(); if (t) window._topicCache[name].add(t);
                         });
                     }
                     if (item.note) {
                         const bracketMatches = item.note.match(/\([^)]+\)/g) || [];
                         bracketMatches.forEach(match => {
-                            const topics = match.replace(/[()（）]/g, '').split(/[,，、;；]/).map(t => t.trim()).filter(t => t);
+                            const topics = match.replace(/[()（）]/g, '').split(/[+，,，、;；]/).map(t => t.trim()).filter(t => t);
                             topics.forEach(t => window._topicCache[name].add(t));
                         });
                     }

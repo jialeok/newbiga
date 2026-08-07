@@ -1329,7 +1329,7 @@
                 if (stockItem && stockItem.note) {
                     const bracketMatches = stockItem.note.match(/\([^)]+\)/g) || [];
                     bracketMatches.forEach(match => {
-                        const topics = match.replace(/[()]/g, '').split(/[,，、;；]/).map(t => t.trim()).filter(t => t);
+                        const topics = match.replace(/[()]/g, '').split(/[+，,，、;；]/).map(t => t.trim()).filter(t => t);
                         topics.forEach(t => allTopics.add(t));
                     });
                 }
@@ -1658,15 +1658,15 @@
                         // （原逻辑只用现有/历史题材，粘贴的 newTopics 被整个丢弃——
                         //  导致"粘贴涨幅+题材后第二页题材分类空白"的 bug）
                         var allTopicsPct = new Set();
-                        if (existingTopics) existingTopics.split(/[,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopicsPct.add(t); });
-                        if (historyParsed.topics) historyParsed.topics.split(/[,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopicsPct.add(t); });
-                        if (newTopics) newTopics.split(/[,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopicsPct.add(t); });
+                        if (existingTopics) existingTopics.split(/[+，,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopicsPct.add(t); });
+                        if (historyParsed.topics) historyParsed.topics.split(/[+，,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopicsPct.add(t); });
+                        if (newTopics) newTopics.split(/[+，,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopicsPct.add(t); });
                         hotList[existingIndex].topics = Array.from(allTopicsPct).join(',');
                     } else if (newTopics) {
                         var allTopics = new Set();
-                        if (existingTopics) existingTopics.split(/[,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopics.add(t); });
-                        if (historyParsed.topics) historyParsed.topics.split(/[,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopics.add(t); });
-                        newTopics.split(/[,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopics.add(t); });
+                        if (existingTopics) existingTopics.split(/[+，,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopics.add(t); });
+                        if (historyParsed.topics) historyParsed.topics.split(/[+，,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopics.add(t); });
+                        newTopics.split(/[+，,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopics.add(t); });
                         hotList[existingIndex].topics = Array.from(allTopics).join(',');
                         hotList[existingIndex].changePct = existingChangePct || historyParsed.changePct;
                     } else {
@@ -1681,8 +1681,8 @@
                     if (historyParsed.topics && !finalTopics) finalTopics = historyParsed.topics;
                     else if (historyParsed.topics && finalTopics) {
                         var allTopics2 = new Set();
-                        finalTopics.split(/[,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopics2.add(t); });
-                        historyParsed.topics.split(/[,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopics2.add(t); });
+                        finalTopics.split(/[+，,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopics2.add(t); });
+                        historyParsed.topics.split(/[+，,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopics2.add(t); });
                         finalTopics = Array.from(allTopics2).join(',');
                     }
                     // [BUG-FIX] 新股票回填代码：优先 stockcodemap，再云端快照缓存。
@@ -1725,7 +1725,7 @@
                 hotList.forEach(function(item) {
                     if (!item || !item.stock || !item.topics) return;
                     const nameTrim = item.stock.trim();
-                    const topicsArr = item.topics.split(/[,，、;；]/).map(function(t) { return t.trim(); }).filter(function(t) { return t; });
+                    const topicsArr = item.topics.split(/[+，,，、;；]/).map(function(t) { return t.trim(); }).filter(function(t) { return t; });
                     if (topicsArr.length === 0) return;
                     const code = scMap[nameTrim] || item.code || '';
                     window.pushStockTopicsToCloud(nameTrim, topicsArr, code).catch(function(e) {
@@ -2441,24 +2441,24 @@
                         // （原逻辑"保留旧题材"会丢弃粘贴的 newTopics，与热门股票版本是同一个 bug）
                         auctionList[existingIndex].changePct = newChangePct;
                         var allTopicsPct = new Set();
-                        if (existingTopics) existingTopics.split(/[,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopicsPct.add(t); });
-                        if (historyParsed.topics) historyParsed.topics.split(/[,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopicsPct.add(t); });
-                        if (newTopics) newTopics.split(/[,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopicsPct.add(t); });
+                        if (existingTopics) existingTopics.split(/[+，,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopicsPct.add(t); });
+                        if (historyParsed.topics) historyParsed.topics.split(/[+，,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopicsPct.add(t); });
+                        if (newTopics) newTopics.split(/[+，,，、;；]/).forEach(function(t) { t = t.trim(); if (t) allTopicsPct.add(t); });
                         auctionList[existingIndex].topics = Array.from(allTopicsPct).join(',');
                     } else if (newTopics) {
                         // 新导入的是题材 → 合并去重
                         var allTopics = new Set();
                         if (existingTopics) {
-                            existingTopics.split(/[,，、;；]/).forEach(function(t) {
+                            existingTopics.split(/[+，,，、;；]/).forEach(function(t) {
                                 t = t.trim(); if (t) allTopics.add(t);
                             });
                         }
                         if (historyParsed.topics) {
-                            historyParsed.topics.split(/[,，、;；]/).forEach(function(t) {
+                            historyParsed.topics.split(/[+，,，、;；]/).forEach(function(t) {
                                 t = t.trim(); if (t) allTopics.add(t);
                             });
                         }
-                        newTopics.split(/[,，、;；]/).forEach(function(t) {
+                        newTopics.split(/[+，,，、;；]/).forEach(function(t) {
                             t = t.trim(); if (t) allTopics.add(t);
                         });
                         auctionList[existingIndex].topics = Array.from(allTopics).join(',');
@@ -2483,10 +2483,10 @@
                         finalTopics = historyParsed.topics;
                     } else if (historyParsed.topics && finalTopics) {
                         var allTopics = new Set();
-                        finalTopics.split(/[,，、;；]/).forEach(function(t) {
+                        finalTopics.split(/[+，,，、;；]/).forEach(function(t) {
                             t = t.trim(); if (t) allTopics.add(t);
                         });
-                        historyParsed.topics.split(/[,，、;；]/).forEach(function(t) {
+                        historyParsed.topics.split(/[+，,，、;；]/).forEach(function(t) {
                             t = t.trim(); if (t) allTopics.add(t);
                         });
                         finalTopics = Array.from(allTopics).join(',');
@@ -2561,7 +2561,7 @@
                         // 注意：p.topics 是纯逗号/顿号分隔的题材文本（如"锂电池,机器人"），
                         // 不是 note 那种带括号的格式，不能用 extractTopics（它专门解析
                         // note 里 "(...)" 括号内的内容），直接按分隔符切分即可。
-                        const topicsArr = p.topics.split(/[,，、;；]/).map(function(t) { return t.trim(); }).filter(function(t) { return t; });
+                        const topicsArr = p.topics.split(/[+，,，、;；]/).map(function(t) { return t.trim(); }).filter(function(t) { return t; });
                         if (topicsArr.length === 0) return;
                         window.pushStockTopicsToCloud(p.stock, topicsArr, p.code).catch(function(e) {
                             window._dbgLog('[AUCTION-ERR] window.importAuctionFromPaste window.pushStockTopicsToCloud ' + p.stock + ' ' + (e && e.message || e));
@@ -4345,7 +4345,7 @@
                     // 全部保留题材，不再截断为前3个（一只股票可能同时属于多个题材分类）
                     // [BUG-FIX 2026-07-26] 过滤掉开盘啦返回的"题材35/题材36"等编号条目
                     // [BUG-FIX] 规范化去重：防止同一只股票写入重复/变体题材
-                    const topicList = [...new Set(themeNames.split(/[，、,;；]/).map(function(t) { return t.trim(); }).filter(function(t) {
+                    const topicList = [...new Set(themeNames.split(/[+，、,;；]/).map(function(t) { return t.trim(); }).filter(function(t) {
                         if (!t) return false;
                         if (/^题材\d+$/.test(t)) return false;   // 题材35 / 题材36
                         if (/^\d+$/.test(t)) return false;     // 纯数字
@@ -6987,7 +6987,7 @@
                     // 全部保留题材，不再截断为前3个（一只股票可能同时属于多个题材分类）
                     // [BUG-FIX 2026-07-26] 过滤掉开盘啦返回的"题材35/题材36"等编号条目
                     // [BUG-FIX] 规范化去重：防止同一只股票写入重复/变体题材
-                    const topicList = [...new Set(themeNames.split(/[，、,;；]/).map(function(t) { return t.trim(); }).filter(function(t) {
+                    const topicList = [...new Set(themeNames.split(/[+，、,;；]/).map(function(t) { return t.trim(); }).filter(function(t) {
                         if (!t) return false;
                         if (/^题材\d+$/.test(t)) return false;   // 题材35 / 题材36
                         if (/^\d+$/.test(t)) return false;     // 纯数字

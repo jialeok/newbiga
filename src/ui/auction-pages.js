@@ -2315,7 +2315,7 @@
         // 清理题材字符串中的无意义编号条目（如"题材32/题材33"），仅用于展示
         export function cleanTopicsForDisplay(topics) {
             if (!topics) return '';
-            return topics.split(/[,，、;；]/).map(function(t) { return t.trim(); }).filter(function(t) {
+            return topics.split(/[+，,，、;；]/).map(function(t) { return t.trim(); }).filter(function(t) {
                 if (!t) return false;
                 if (/^题材\d+$/.test(t)) return false;   // 题材35 / 题材36
                 if (/^\d+$/.test(t)) return false;     // 纯数字
@@ -2411,7 +2411,7 @@
                         if (!item) return;
                         // 清理 topics 字段里的 "题材N"
                         if (item.topics) {
-                            var arr = item.topics.split(/[，、,;；]/).map(function(t) { return t.trim(); });
+                            var arr = item.topics.split(/[+，、,;；]/).map(function(t) { return t.trim(); });
                             var filtered = arr.filter(function(t) {
                                 if (!t) return false;
                                 if (/^题材\d+$/.test(t)) { cleanedTopics++; return false; }
@@ -2426,7 +2426,7 @@
                         // 清理 note 字段里的 "(题材35)" 等括号内容
                         if (item.note && /[(（]([^)）]*题\d+[^)）]*)[)）]/.test(item.note)) {
                             item.note = item.note.replace(/[(（]([^)）]+)[)）]/g, function(m, p1) {
-                                var arr = p1.split(/[，、,;；]/).map(function(t) { return t.trim(); });
+                                var arr = p1.split(/[+，、,;；]/).map(function(t) { return t.trim(); });
                                 var filtered = arr.filter(function(t) {
                                     if (/^题材\d+$/.test(t)) { cleanedTopics++; return false; }
                                     if (/^\d+$/.test(t)) { cleanedTopics++; return false; }
@@ -2458,7 +2458,7 @@
                     (hotData[date] || []).forEach(function(item) {
                         if (!item) return;
                         if (item.topics) {
-                            var arr2 = item.topics.split(/[，、,;；]/).map(function(t) { return t.trim(); });
+                            var arr2 = item.topics.split(/[+，、,;；]/).map(function(t) { return t.trim(); });
                             var filtered2 = arr2.filter(function(t) {
                                 if (!t) return false;
                                 if (/^题材\d+$/.test(t)) { cleanedTopics++; return false; }
@@ -2472,7 +2472,7 @@
                         }
                         if (item.note && /[(（]([^)）]*题\d+[^)）]*)[)）]/.test(item.note)) {
                             item.note = item.note.replace(/[(（]([^)）]+)[)）]/g, function(m, p1) {
-                                var arr = p1.split(/[，、,;；]/).map(function(t) { return t.trim(); });
+                                var arr = p1.split(/[+，、,;；]/).map(function(t) { return t.trim(); });
                                 var filtered = arr.filter(function(t) {
                                     if (/^题材\d+$/.test(t)) { cleanedTopics++; return false; }
                                     if (/^\d+$/.test(t)) { cleanedTopics++; return false; }

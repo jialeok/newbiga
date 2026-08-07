@@ -1714,7 +1714,7 @@
             if (auctionStock && auctionStock.note) {
                 const bracketMatches = auctionStock.note.match(/\([^)]+\)/g) || [];
                 bracketMatches.forEach(match => {
-                    const topics = match.replace(/[()]/g, '').split(/[,，、;；]/).map(t => t.trim()).filter(t => t);
+                    const topics = match.replace(/[()]/g, '').split(/[+，,，、;；]/).map(t => t.trim()).filter(t => t);
                     topics.forEach(t => allTopics.add(t));
                 });
             }
@@ -1794,7 +1794,7 @@
                     // 优先从 topics 字段读取，回退到 note 字段提取
                     let topics = [];
                     if (auctionItem.topics) {
-                        topics = auctionItem.topics.split(/[,，、;；]/).map(t => t.trim()).filter(t => t);
+                        topics = auctionItem.topics.split(/[+，,，、;；]/).map(t => t.trim()).filter(t => t);
                     }
                     if (topics.length === 0 && auctionItem.note) {
                         topics = window.extractTopics(auctionItem.note);

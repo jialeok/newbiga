@@ -238,7 +238,7 @@
                     const allTopics = new Set();
                     bracketMatches.forEach(match => {
                         const content = match.replace(/[()（）]/g, '');
-                        const topics = content.split(/[,，、;；]/).map(t => t.trim()).filter(t => t);
+                        const topics = content.split(/[+，,，、;；]/).map(t => t.trim()).filter(t => t);
                         topics.forEach(t => allTopics.add(t));
                     });
                     const percentMatches = item.note.match(/-?\d+\.?\d*%/g) || [];

@@ -1242,7 +1242,7 @@
             let topics = [];
             matches.forEach(m => {
                 const content = m.replace(/[()（）]/g, '');
-                const splitTopics = content.split(/[，、,;；]/).map(t => t.trim()).filter(t => t);
+                const splitTopics = content.split(/[+，、,;；]/).map(t => t.trim()).filter(t => t);
                 topics = topics.concat(splitTopics);
             });
             // [BUG-FIX 2026-07-26] 过滤掉开盘啦 API 返回的 "题材35/题材36/题材38" 等
