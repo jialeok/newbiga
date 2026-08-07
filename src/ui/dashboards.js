@@ -422,6 +422,21 @@
   // 只在收盘后（北京时间 >= 15:00）或 close 有值时才执行
   async function trySyncEtfFromBiddingClose(date) {
     if (!date) return;
+    // 防窜日期：未来日期不同步ETF数据
+    const _today = (typeof window._getLocalTodayStr === 'function') ? window._getLocalTodayStr() : '';
+    if (_today && date > _today) {
+      // 清理被污染的数据：未来日期无竞价数据但云端有ETF数据 → 删除
+      if (boardStore.earlyEtf && (boardStore.earlyEtf.shuliang || boardStore.earlyEtf.die_zhangbi)) {
+        try {
+          const sb = window.getDashboardsSupabase();
+          await sb.from('early_etf_data').delete().eq('date', date);
+          boardStore.earlyEtf = null;
+          window.syncToLegacyStorage();
+          window._dbgLog && window._dbgLog('[DASH-CLEAN] 清理未来日期 ' + date + ' 被污染的ETF数据');
+        } catch(e) { window._dbgLog && window._dbgLog('[DASH-CLEAN] 清理ETF失败: ' + (e.message || e)); }
+      }
+      return;
+    }
     const closeVal = await window.fetchSectorEtfCloseFromBidding(date);
     if (!closeVal) return;
 
@@ -855,6 +870,9 @@
     syncSectorEtfZhangNum: async (zhangNum) => {
       // 由外部竞价变化保存/抓取调用，直接原子写入 early_etf_data
       if (!boardStore.currentDate) return;
+      // 防窜日期：未来日期不自动写入
+      const _today = (typeof window._getLocalTodayStr === 'function') ? window._getLocalTodayStr() : '';
+      if (_today && boardStore.currentDate > _today) return;
       const zhang = parseInt(zhangNum, 10) || 0;
       // 防窜日期：同 recalcDuibanFromAuction，仅当 existing.date 与当前日期一致时才继承
       const existing = (boardStore.earlyEtf && boardStore.earlyEtf.date === boardStore.currentDate) ? boardStore.earlyEtf : {};
@@ -956,8 +974,24 @@
       window.recalcDuibanFromAuction = async function() {
         // 保留原有语义：从早盘竞价列表统计后写入
         if (typeof window.getTodayAuction !== 'function') return;
+        const _today = (typeof window._getLocalTodayStr === 'function') ? window._getLocalTodayStr() : '';
+        const _isFuture = _today && boardStore.currentDate > _today;
         const auctionList = window.getTodayAuction();
         const total = auctionList.length;
+        // 防窜日期：未来日期不自动写入统计数据
+        if (_isFuture) {
+          // 清理被污染的数据：未来日期无竞价数据但云端有统计 → 删除
+          if (total === 0 && boardStore.recentMulti && (boardStore.recentMulti.shuliang || boardStore.recentMulti.die_zhangbi)) {
+            try {
+              const sb = window.getDashboardsSupabase();
+              await sb.from('recent_multi_data').delete().eq('date', boardStore.currentDate);
+              boardStore.recentMulti = null;
+              window.syncToLegacyStorage();
+              window._dbgLog && window._dbgLog('[DASH-CLEAN] 清理未来日期 ' + boardStore.currentDate + ' 被污染的最近多板数据');
+            } catch(e) { window._dbgLog && window._dbgLog('[DASH-CLEAN] 清理失败: ' + (e.message || e)); }
+          }
+          return;
+        }
         if (total === 0) return;
         let riseCount = 0;
         auctionList.forEach(item => {
