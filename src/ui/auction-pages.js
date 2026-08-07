@@ -2920,10 +2920,12 @@
             const dayList = auctionData[nextDay] || [];
             const exists = dayList.some(function(s) { return s && s.stock && s.stock.trim() === stockName.trim(); });
             if (!exists) {
-                dayList.push({ stock: stockName.trim(), code: window.getStockCode ? window.getStockCode(stockName) : '', volume: '', yestVolume: '', note: '', obsAutoAdded: true });
+                dayList.push({ stock: stockName.trim(), code: window.getStockCode ? window.getStockCode(stockName) : '', volume: '', yestVolume: '', note: '', obsAutoAdded: false });
                 auctionData[nextDay] = dayList;
                 window.setAuctionDateData(nextDay, dayList, 'auctionBoardTags');
                 if (window._addAuctionWatchlistMember) window._addAuctionWatchlistMember(nextDay, stockName.trim());
+                // 持久化到 localStorage，防止切日期时数据被覆盖
+                if (typeof window.saveData === 'function') window.saveData();
             }
         }
         window.setAuctionTag = setAuctionTag;
@@ -2947,7 +2949,8 @@
                 { label: '买入', tag: 'buy', color: '#dc2626' },
                 { label: '卖出', tag: 'sell', color: '#6b7280' },
                 { label: '持有', tag: 'hold', color: '#2563eb' },
-                { label: '取消次日观察', tag: 'cancel', color: '#64748b' }
+
+                { label: '取消标签', tag: null, color: '#475569' }
             ];
             btns.forEach(function(b) {
                 const btn = document.createElement('button');
@@ -2960,6 +2963,11 @@
                         _ensureStockInNextDay(stockName, date);
                     }
                     document.body.removeChild(overlay);
+                    // 同步 bump dataVersions，确保 Vue computed 立即重算（不等微任务）
+                    if (window.auctionStore && window.auctionStore.dataVersions) {
+                        const _ds = window.currentGroup === 'hot' ? 'hot' : 'auction';
+                        window.auctionStore.dataVersions[_ds] = (window.auctionStore.dataVersions[_ds] || 0) + 1;
+                    }
                     window.renderAuction(window.currentGroup);
                 };
                 popup.appendChild(btn);

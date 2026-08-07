@@ -398,8 +398,7 @@
   // ==========================================================================
   async function saveStocksForDate(date) {
     if (!date) return;
-    const list = _stocksMemCache[date];
-    if (!Array.isArray(list)) return;
+    const list = Array.isArray(_stocksMemCache[date]) ? _stocksMemCache[date] : [];
     try {
       const sb = getSupabase();
       // 先删后插：保证该日期股票清单与本地一致

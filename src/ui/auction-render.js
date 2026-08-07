@@ -240,8 +240,7 @@
                     // 防御：异步回调触发时用户可能已切到其它 tab/日期
                     if (window.currentGroup !== 'auction') return;
                     if (window.currentDate !== _sideEffectDate) return;
-                    // 观察组自动继承：将上一交易日"竞/昨"达标股票自动添加到当日列表
-                    window.ensureObservationStocks(_sideEffectDate);
+                    // 观察组自动继承已移除（用户手动打标替代）
                     // 买/卖/持标签继承已改为独立存储（auctionBoardTags），不再调 ensureBoughtStocksForDate
                     // 每次渲染早盘竞价看板时，顺带重新计算一次"最近多板"统计，保证两个看板实时同步
                     window.recalcDuibanFromAuction();
@@ -879,11 +878,8 @@
                 if (!jingYestToggleChecked && _isObs && !_isAutoAdded) {
                     _stockNameDisplay += '*';
                 }
-                // 构建角标 HTML（观/买/卖/持），独立于股票名
+                // 构建角标 HTML（买/卖/持），独立于股票名
                 let _badgeHtml = '';
-                if (jingYestToggleChecked && _isObs && _isAutoAdded && _matchesTodayForTag) {
-                    _badgeHtml += '<span class="auction-badge badge-obs" title="观察组自动补入">观</span>';
-                }
                 if (item.monitorWarning) {
                     _badgeHtml += '<span class="auction-badge badge-warn" title="严重异常波动">⚠</span>';
                 }

@@ -75,9 +75,7 @@
         const _isAutoAdded = ctx.autoAddedSet.has(name);
         const _matchesToday = ctx.jingYestToggleChecked && ctx.jingYestHighlightSet && ctx.jingYestHighlightSet.has(name);
         let html = '';
-        if (ctx.jingYestToggleChecked && _isObs && _isAutoAdded && _matchesToday) {
-            html += '<span class="auction-badge badge-obs" title="观察组自动补入">观</span>';
-        }
+
         if (item.monitorWarning) {
             html += '<span class="auction-badge badge-warn" title="严重异常波动">⚠</span>';
         }

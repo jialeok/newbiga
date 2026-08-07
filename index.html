@@ -2102,6 +2102,42 @@
             border-bottom: 1px solid #ede9fe;
         }
 
+        .auction-help-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #cbd5e1;
+            color: #475569;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-left: 6px;
+            vertical-align: middle;
+            user-select: none;
+        }
+        .auction-help-popup {
+            position: absolute;
+            top: 100%;
+            left: 10px;
+            z-index: 100;
+            background: #1e293b;
+            color: #e2e8f0;
+            border-radius: 10px;
+            padding: 16px 20px;
+            max-width: 520px;
+            font-size: 13px;
+            line-height: 1.7;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            display: none;
+        }
+        .auction-help-popup.show { display: block; }
+        .auction-help-popup h4 { color: #93c5fd; margin: 10px 0 4px 0; font-size: 13px; }
+        .auction-help-popup ul { margin: 0 0 8px 0; padding-left: 18px; }
+        .auction-help-popup li { margin-bottom: 2px; }
+
         /* 第二行工具栏：放置"竞/昨"等后续新增开关，避免挤压第一行 */
         .auction-toolbar-row2 {
             display: grid;
@@ -6056,8 +6092,43 @@
                         <span id="auctionTotalStrength" style="margin-left: 8px; font-weight: 600;">
                             强度：<span id="auctionStrengthValue" style="color: #ffffff;">-</span><span id="auctionStrengthArrow" style="color: #ffffff; font-size: 14px; font-weight: bold;">-</span>
                         </span>
+                        <span class="auction-help-icon" onclick="event.stopPropagation();toggleAuctionHelp()">?</span>
                     </div>
                     <div class="auction-subtitle"></div>
+                </div>
+                <div class="auction-help-popup" id="auctionHelpPopup" onclick="event.stopPropagation()">
+                    <h4>角标说明</h4>
+                    <ul>
+                        <li><b>实心红"买"</b>：前一交易日打了"买入"标签，今天继承显示</li>
+                        <li><b>实心灰"卖"</b>：前一交易日打了"卖出"标签，今天继承显示</li>
+                        <li><b>实心蓝"持"</b>：前一交易日打了"持有"标签，今天继承显示</li>
+                        <li><b>虚线红"买→"</b>：今天刚选"买入"，明天继承（→表示将影响次日）</li>
+                        <li><b>虚线灰"卖→"</b>：今天刚选"卖出"，明天继承</li>
+                        <li><b>虚线蓝"持→"</b>：今天刚选"持有"，明天继承</li>
+                        <li><b>⚠</b>：严重异常波动警示</li>
+                        <li><b>*（星号）</b>：前一交易日竞/昨高光股票，竞/昨开关关闭时显示</li>
+                    </ul>
+                    <h4>长按操作</h4>
+                    <ul>
+                        <li><b>买入</b>：标记买入，次日自动加入竞价列表，次日显示实心红"买"</li>
+                        <li><b>卖出</b>：标记卖出，次日自动加入竞价列表，次日显示实心灰"卖"</li>
+                        <li><b>持有</b>：标记持有，次日自动加入竞价列表，次日显示实心蓝"持"</li>
+                        <li><b>取消标签</b>：删除该股票的所有标签，当天无角标，次日不继承（完全重置）</li>
+                    </ul>
+                    <h4>标签继承规则</h4>
+                    <ul>
+                        <li>D日角标由D-1（前一交易日）的标签决定（被动展示，实心角标）</li>
+                        <li>D日选择标签后立即显示虚线角标（当天可见），次日变为实心角标</li>
+                        <li>选"取消标签"则无角标、不继承，相当于从未打过标签</li>
+                        <li>标签存储独立于股票卡片列表，互不影响</li>
+                    </ul>
+                    <h4>工具栏开关</h4>
+                    <ul>
+                        <li><b>竞/昨</b>：按今日竞价量/昨日成交量比排序高光</li>
+                        <li><b>平行</b>：平行高光（今竞价量>T-1竞价量 且 T-1成交量>T-2成交量）</li>
+                        <li><b>占比</b>：按竞价量/昨日成交量占比排序</li>
+                        <li><b>数据</b>：按历史出现天数排序</li>
+                    </ul>
                 </div>
                 <div class="auction-header-right">
                     <div class="auction-page-indicator" id="auctionPageIndicator">
@@ -8612,6 +8683,13 @@
 
       </div>
     </div>
+
+    <script>
+    function toggleAuctionHelp() {
+        var p = document.getElementById('auctionHelpPopup');
+        if (p) p.classList.toggle('show');
+    }
+    </script>
 
 
 </body>

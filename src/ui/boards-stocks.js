@@ -2451,8 +2451,10 @@
                     }
                 }
                 
-                window.saveData();
-                window.renderList();
+            window.saveData();
+            // 立即推送云端，避免防抖延迟内刷新导致数据恢复
+            if (window.remainingBoards && window.remainingBoards.pushNow) window.remainingBoards.pushNow();
+            window.renderList();
                 
                 // 恢复展开状态
                 if (expandedStockId) {
