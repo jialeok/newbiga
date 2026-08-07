@@ -245,6 +245,16 @@
   // Supabase 原子操作
   // ==========================================================================
 
+  // 防窜日期辅助：判断指定日期是否为"未来日期且无竞价数据"
+  function _isFutureDateWithoutAuction(date) {
+    const _today = (typeof window._getLocalTodayStr === 'function') ? window._getLocalTodayStr() : '';
+    if (!_today || date <= _today) return false;
+    const auctionList = (window.getAuctionData && window.getAuctionData()[date]) || [];
+    const watchlistSet = window._getAuctionWatchlistSet ? window._getAuctionWatchlistSet(date) : new Set();
+    const formalCount = auctionList.filter(function(r) { return r && r.stock && watchlistSet.has(r.stock.trim()); }).length;
+    return formalCount === 0;
+  }
+
   async function loadRecentMulti(date) {
     if (!date) return;
     boardStore.loadingRecent = true;
@@ -270,6 +280,15 @@
       } else {
         boardStore.recentMulti = data;
         window.syncToLegacyStorage();
+      }
+      // 防窜日期清理：未来日期无竞价数据但云端有统计 → 删除
+      if (boardStore.recentMulti && (boardStore.recentMulti.shuliang || boardStore.recentMulti.die_zhangbi) && _isFutureDateWithoutAuction(date)) {
+        try {
+          await sb.from('recent_multi_data').delete().eq('date', date);
+          boardStore.recentMulti = null;
+          window.syncToLegacyStorage();
+          window._dbgLog && window._dbgLog('[DASH-CLEAN] loadRecentMulti 清理未来日期 ' + date + ' 被污染数据');
+        } catch(e) { window._dbgLog && window._dbgLog('[DASH-CLEAN] loadRecentMulti 清理失败: ' + (e.message || e)); }
       }
     } catch (e) {
       boardStore.lastError = '最近多板加载失败: ' + (e.message || e);
@@ -303,6 +322,15 @@
       } else {
         boardStore.earlyEtf = data;
         window.syncToLegacyStorage();
+      }
+      // 防窜日期清理：未来日期无竞价数据但云端有ETF数据 → 删除
+      if (boardStore.earlyEtf && (boardStore.earlyEtf.shuliang || boardStore.earlyEtf.die_zhangbi) && _isFutureDateWithoutAuction(date)) {
+        try {
+          await sb.from('early_etf_data').delete().eq('date', date);
+          boardStore.earlyEtf = null;
+          window.syncToLegacyStorage();
+          window._dbgLog && window._dbgLog('[DASH-CLEAN] loadEarlyEtf 清理未来日期 ' + date + ' 被污染数据');
+        } catch(e) { window._dbgLog && window._dbgLog('[DASH-CLEAN] loadEarlyEtf 清理失败: ' + (e.message || e)); }
       }
     } catch (e) {
       boardStore.lastError = 'ETF 加载失败: ' + (e.message || e);
