@@ -88,6 +88,17 @@
         } else if (tagState.selected) {
             html += '<span class="auction-badge badge-hold">持</span>';
         }
+        // 当天选择（虚线角标）
+        const _todayChoice = window.getAuctionTagChoice(name, ctx.date || window.currentDate);
+        if (_todayChoice === 'buy') {
+            html += '<span class="auction-badge badge-today-buy" title="今天选：买入→明天继承">买→</span>';
+        } else if (_todayChoice === 'sell') {
+            html += '<span class="auction-badge badge-today-sell" title="今天选：卖出→明天继承">卖→</span>';
+        } else if (_todayChoice === 'hold') {
+            html += '<span class="auction-badge badge-today-hold" title="今天选：持有→明天继承">持→</span>';
+        } else if (_todayChoice === 'cancel') {
+            html += '<span class="auction-badge badge-today-cancel" title="今天选：取消次日观察">×</span>';
+        }
         return html;
     }
     window.buildBadgeHtml = buildBadgeHtml;

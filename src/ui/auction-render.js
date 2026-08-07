@@ -894,6 +894,17 @@
                 } else if (isSelected) {
                     _badgeHtml += '<span class="auction-badge badge-hold">持</span>';
                 }
+                // 当天选择（虚线角标）：buy/sell/hold 带→箭头表示将影响D+1，cancel 显示×
+                const _todayChoice = window.getAuctionTagChoice(_iname, window.currentDate);
+                if (_todayChoice === 'buy') {
+                    _badgeHtml += '<span class="auction-badge badge-today-buy" title="今天选：买入→明天继承">买→</span>';
+                } else if (_todayChoice === 'sell') {
+                    _badgeHtml += '<span class="auction-badge badge-today-sell" title="今天选：卖出→明天继承">卖→</span>';
+                } else if (_todayChoice === 'hold') {
+                    _badgeHtml += '<span class="auction-badge badge-today-hold" title="今天选：持有→明天继承">持→</span>';
+                } else if (_todayChoice === 'cancel') {
+                    _badgeHtml += '<span class="auction-badge badge-today-cancel" title="今天选：取消次日观察">×</span>';
+                }
                 
                 return `
                     <div class="${itemClass}" data-index="${index}" data-stock="${item.stock || ''}">
