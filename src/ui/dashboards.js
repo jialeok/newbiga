@@ -1023,16 +1023,21 @@
       window.saveDuibanComment = async function() {
         const input = document.getElementById('duibanCommentInput');
         const comment = input ? input.value.trim() : '';
-        const existing = (boardStore.recentMulti && boardStore.recentMulti.date === boardStore.currentDate) ? boardStore.recentMulti : {};
-        await window.saveRecentMulti({
-          shuliang: existing.shuliang || '',
-          die_count: existing.die_count ?? null,
-          zhang_count: existing.zhang_count ?? null,
-          die_zhangbi: existing.die_zhangbi || '',
-          jingtu: existing.jingtu || '',
-          tushi: existing.tushi || '',
-          comment
-        });
+        // 用 update 只更新 comment 字段，不碰 tushi/jingtu 等其他字段
+        try {
+          const sb = window.getDashboardsSupabase();
+          const { data, error } = await sb
+            .from('recent_multi_data')
+            .update({ comment, updated_at: window.formatNowIso() })
+            .eq('date', boardStore.currentDate)
+            .select()
+            .maybeSingle();
+          if (error) throw error;
+          if (data) {
+            boardStore.recentMulti = data;
+            window.syncToLegacyStorage();
+          }
+        } catch(e) { window.warnToast('保存评论失败: ' + (e.message || e)); }
         if (typeof window.closeDuibanCommentModal === 'function') window.closeDuibanCommentModal();
       };
 
@@ -1149,16 +1154,21 @@
       window.saveEtfComment = async function() {
         const input = document.getElementById('etfCommentInput');
         const comment = input ? input.value.trim() : '';
-        const existing = (boardStore.earlyEtf && boardStore.earlyEtf.date === boardStore.currentDate) ? boardStore.earlyEtf : {};
-        await window.saveEarlyEtf({
-          shuliang: existing.shuliang || '',
-          die_count: existing.die_count ?? null,
-          zhang_count: existing.zhang_count ?? null,
-          die_zhangbi: existing.die_zhangbi || '',
-          jingtu: existing.jingtu || '',
-          tushi: existing.tushi || '',
-          comment
-        });
+        // 用 update 只更新 comment 字段，不碰 tushi/jingtu 等其他字段
+        try {
+          const sb = window.getDashboardsSupabase();
+          const { data, error } = await sb
+            .from('early_etf_data')
+            .update({ comment, updated_at: window.formatNowIso() })
+            .eq('date', boardStore.currentDate)
+            .select()
+            .maybeSingle();
+          if (error) throw error;
+          if (data) {
+            boardStore.earlyEtf = data;
+            window.syncToLegacyStorage();
+          }
+        } catch(e) { window.warnToast('保存评论失败: ' + (e.message || e)); }
         if (typeof window.closeEtfCommentModal === 'function') window.closeEtfCommentModal();
       };
 
