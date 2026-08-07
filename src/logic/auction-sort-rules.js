@@ -1,3 +1,21 @@
+        // [PERF] 初始化信号函数指纹缓存（之前从未定义，导致所有信号函数缓存空转）
+        if (!window._signalCache) window._signalCache = {};
+        if (!window._viewFpList) window._viewFpList = function(list) {
+            if (!list || !list.length) return '0';
+            var fp = list.length + '|';
+            for (var i = 0; i < list.length; i++) {
+                var it = list[i];
+                if (!it) { fp += '_,'; continue; }
+                fp += (it.stock || '') + ':' + (it.volume || '') + ':' + (it.yestVolume || '') + ':' + (it.changePct || '') + ',';
+            }
+            return fp;
+        };
+        if (!window._signalFpFor) window._signalFpFor = function(dateStr, dataSource) {
+            var __g = window.getGroupData(dataSource);
+            var __t1 = window.getPreviousTradingDay(dateStr);
+            return window._viewFpList(__g[dateStr]) + '' + window._viewFpList(__g[__t1]);
+        };
+
         export function getHighRatioStocksForDate(dateStr, dataSource='auction') {
             // [PERF-CORE] 指纹缓存：同一组输入数据在同帧/多次调用间直接复用结果
             const __k = 'hr|' + (dataSource || 'auction') + '|' + dateStr;

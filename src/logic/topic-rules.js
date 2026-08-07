@@ -36,31 +36,34 @@
             }
         }
 
+        // [PERF] getCoreTopics 内存缓存：避免每次 getTopicGroups 都 localStorage 读 + JSON.parse
+        let _coreTopicsMemCache = null;
         // 获取核心词库
         // [BUG-FIX 2026-07-26] 之前 localStorage 存 '[]'（空数组字符串）时直接返回 []，
         // 导致核心词管理弹窗空白 + 第二页题材分组全部落入"其它"。
         // 现在改为：空数组/非数组/长度为 0 都回退到 window.defaultCoreTopics。
         export function getCoreTopics() {
+            if (_coreTopicsMemCache) return _coreTopicsMemCache;
+            let _result = window.defaultCoreTopics;
             const stored = localStorage.getItem('coreTopics');
             if (stored) {
                 try {
                     const parsed = JSON.parse(stored);
                     if (Array.isArray(parsed) && parsed.length > 0) {
-                        return parsed;
+                        _result = parsed;
+                    } else {
+                        localStorage.removeItem('coreTopics');
+                        window._dbgLog('[CORE-TOPICS] 检测到空 coreTopics，回退默认 34 个核心词');
                     }
-                    // 空数组：回退默认，并清理掉这个无效值
-                    localStorage.removeItem('coreTopics');
-                    window._dbgLog('[CORE-TOPICS] 检测到空 coreTopics，回退默认 34 个核心词');
-                    return window.defaultCoreTopics;
-                } catch (e) {
-                    return window.defaultCoreTopics;
-                }
+                } catch (e) { /* _result 保持 defaultCoreTopics */ }
             }
-            return window.defaultCoreTopics;
+            _coreTopicsMemCache = _result;
+            return _result;
         }
 
         // 保存核心词库（同步到 localStorage + 云端 core_topics 表）
         export function saveCoreTopics(topics) {
+            _coreTopicsMemCache = null;
             localStorage.setItem('coreTopics', JSON.stringify(topics));
             // 异步推送到云端（不阻塞 UI）
             if (!window._coreTopicsPushingToCloud) {
@@ -232,8 +235,13 @@
             return false;
         }
 
+        // [PERF] getTopicGroups 指纹缓存：toggle 只改排序状态不改数据，复用分组结果
+        let _topicGroupsFp = null;
+        let _topicGroupsCache = null;
         // 获取题材分组（使用核心词匹配）
         export function getTopicGroups(auctionList) {
+            const __fp = auctionList.length + '|' + auctionList.map(function(i) { return (i.stock||'') + ':' + (i.topics||''); }).join('\u00a7');
+            if (_topicGroupsFp === __fp && _topicGroupsCache) return _topicGroupsCache;
             const __tgT0 = performance.now();
             const coreTopics = window.getCoreTopics();
             const __tgAfterCore = performance.now();
@@ -436,6 +444,8 @@
             if (__tgTotal > 50) {
                 window._dbgLog('[PERF-SEG] window.getTopicGroups 耗时' + __tgTotal.toFixed(1) + 'ms（共' + auctionList.length + '只股票）：window.getCoreTopics(localStorage)=' + (__tgAfterCore - __tgT0).toFixed(1) + 'ms，window.buildTopicCache=' + (__tgAfterBuild - __tgAfterCore).toFixed(1) + 'ms，历史题材回退=' + __tgHistoryFallbackTime.toFixed(1) + 'ms（' + __tgHistoryFallbackCalls + '只触发回退，均值' + (__tgHistoryFallbackTime / Math.max(1, __tgHistoryFallbackCalls)).toFixed(2) + 'ms/只），主循环及排序剩余=' + (__tgTotal - (__tgAfterBuild - __tgT0) - __tgHistoryFallbackTime).toFixed(1) + 'ms');
             }
+            _topicGroupsFp = __fp;
+            _topicGroupsCache = validGroups;
             return validGroups;
         }
 
