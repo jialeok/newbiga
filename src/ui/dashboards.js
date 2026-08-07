@@ -432,7 +432,9 @@
     const existing = boardStore.earlyEtf;
     if (existing && existing.sector_etf_close === closeVal && existing.sector_etf_synced_at) return;
 
-    const total = existing && existing.shuliang ? parseInt(existing.shuliang, 10) || 48 : 48;
+    // 防窜日期：仅当 existing.date 与当前日期一致时才继承其字段
+    const safeExisting = (existing && existing.date === date) ? existing : {};
+    const total = safeExisting.shuliang ? parseInt(safeExisting.shuliang, 10) || 48 : 48;
     const die = Math.max(0, total - zhang);
 
     await window.saveEarlyEtf({
@@ -440,9 +442,9 @@
       die_count: die,
       zhang_count: zhang,
       die_zhangbi: window.buildDieZhangbi(die, zhang),
-      jingtu: existing?.jingtu || '',
-      tushi: existing?.tushi || '',
-      comment: existing?.comment || '',
+      jingtu: safeExisting.jingtu || '',
+      tushi: safeExisting.tushi || '',
+      comment: safeExisting.comment || '',
       sector_etf_close: closeVal,
       sector_etf_synced_at: window.formatNowIso()
     });
@@ -836,7 +838,10 @@
     recalcDuibanFromAuction: async (total, fallCount, riseCount) => {
       // 由外部早盘竞价统计调用，直接原子写入 recent_multi_data
       if (!boardStore.currentDate) return;
-      const existing = boardStore.recentMulti || {};
+      // 防窜日期：仅当 boardStore.recentMulti 的 date 与当前日期一致时才继承其字段，
+      // 否则 loadRecentMulti 尚未完成（异步），boardStore.recentMulti 仍是前一日期的数据，
+      // 把旧日期的 tushi/jingtu/comment 写到新日期 → 未来日期显示其他日期的石墨链接
+      const existing = (boardStore.recentMulti && boardStore.recentMulti.date === boardStore.currentDate) ? boardStore.recentMulti : {};
       await window.saveRecentMulti({
         shuliang: String(total),
         die_count: fallCount,
@@ -851,7 +856,8 @@
       // 由外部竞价变化保存/抓取调用，直接原子写入 early_etf_data
       if (!boardStore.currentDate) return;
       const zhang = parseInt(zhangNum, 10) || 0;
-      const existing = boardStore.earlyEtf || {};
+      // 防窜日期：同 recalcDuibanFromAuction，仅当 existing.date 与当前日期一致时才继承
+      const existing = (boardStore.earlyEtf && boardStore.earlyEtf.date === boardStore.currentDate) ? boardStore.earlyEtf : {};
       const total = existing.shuliang ? parseInt(existing.shuliang, 10) || 48 : 48;
       const die = Math.max(0, total - zhang);
       await window.saveEarlyEtf({
@@ -926,7 +932,7 @@
           die_zhangbi: window.buildDieZhangbi(nDie, nZhang),
           jingtu,
           tushi,
-          comment: boardStore.recentMulti?.comment || ''
+          comment: (boardStore.recentMulti && boardStore.recentMulti.date === boardStore.currentDate ? boardStore.recentMulti : {}).comment || ''
         });
         if (typeof window.closeDuibanModal === 'function') window.closeDuibanModal();
       };
@@ -934,7 +940,7 @@
       window.saveDuibanComment = async function() {
         const input = document.getElementById('duibanCommentInput');
         const comment = input ? input.value.trim() : '';
-        const existing = boardStore.recentMulti || {};
+        const existing = (boardStore.recentMulti && boardStore.recentMulti.date === boardStore.currentDate) ? boardStore.recentMulti : {};
         await window.saveRecentMulti({
           shuliang: existing.shuliang || '',
           die_count: existing.die_count ?? null,
@@ -1036,7 +1042,7 @@
           die_zhangbi: window.buildDieZhangbi(nDie, nZhang),
           jingtu,
           tushi,
-          comment: boardStore.earlyEtf?.comment || ''
+          comment: (boardStore.earlyEtf && boardStore.earlyEtf.date === boardStore.currentDate ? boardStore.earlyEtf : {}).comment || ''
         });
         if (typeof window.closeEtfModal === 'function') window.closeEtfModal();
       };
@@ -1044,7 +1050,7 @@
       window.saveEtfComment = async function() {
         const input = document.getElementById('etfCommentInput');
         const comment = input ? input.value.trim() : '';
-        const existing = boardStore.earlyEtf || {};
+        const existing = (boardStore.earlyEtf && boardStore.earlyEtf.date === boardStore.currentDate) ? boardStore.earlyEtf : {};
         await window.saveEarlyEtf({
           shuliang: existing.shuliang || '',
           die_count: existing.die_count ?? null,
