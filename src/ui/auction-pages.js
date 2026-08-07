@@ -245,16 +245,16 @@
                         })
                         .map(x => x.s);
                 } else if (sortByJingYestRatioEnabled2) {
-                    // "竞/昨占比"排序：符合竞昨条件(高光)排前面，仅平行达标排中间，都不达标排后面；各档内均按占比从高到低
-                    const allRatioDiffInfo2 = window.getRatioDiffInfoForDate(window.currentDate, dataSource);
+                    // "竞/昨占比"排序：按 UI 显示的占比(volume/yestVolume)从高到低；符合竞昨条件(高光)排前面，仅平行达标排中间，都不达标排后面
                     stocksToRender = group.stocks
                         .map((s, pos) => {
                             const name = s.stock ? s.stock.trim() : '';
                             const isParallel = parallelStockNames2 && parallelStockNames2.has(name);
                             const isHighlight = name && jingYestHighlightSet2 && jingYestHighlightSet2.has(name);
                             const tier = isHighlight ? 0 : (isParallel ? 1 : 2);
-                            const info = name ? allRatioDiffInfo2.get(name) : null;
-                            const jr = info ? info.jingRatio : null;
+                            const vol = parseFloat(s.volume) || 0;
+                            const yvol = parseFloat(s.yestVolume) || 0;
+                            const jr = (vol > 0 && yvol > 0) ? (vol / yvol) : null;
                             return { s, pos, jr, tier };
                         })
                         .sort((a, b) => {
