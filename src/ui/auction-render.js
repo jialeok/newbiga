@@ -802,31 +802,22 @@
                 
                 const isHighlight = ratioValue >= 10;
                 const isHighlightLight = ratioValue >= 4.5 && ratioValue < 10;
-                // 方案 B：标签从 stocksData 实时派生（deriveAuctionTagState），不读 item.bought/sold。
-                // selected 保留在 item 上但仅代表"手动点选"。
+                // 标签从独立存储读取（getAuctionTagState），与股票卡片列表解耦
                 const _iname = item.stock ? item.stock.trim() : '';
-                const _itagState = window.deriveAuctionTagState(_iname, window.currentDate);
-                const isConfirmedSold = _itagState.sold || (_iname && _confirmedSoldSet.has(_iname));
-                const isSelected = !isConfirmedSold && (_itagState.selected || item.selected === true);
-                const isBought = !isConfirmedSold && _itagState.bought;
+                const _itagState = window.getAuctionTagState(_iname, window.currentDate);
                 const isSold = _itagState.sold;
-                const isFixed = _itagState.sold || _itagState.bought || _itagState.selected;
-                // 观察组继承来的买入（obsAutoAdded=true 且 bought=true）：用户明确不要红色背景，
-                // 只显示名称后的"买"字上标；背景只给"当天手动标记买入"（非观察组继承）的股票
-                const isObsInheritedBought = isBought && item.obsAutoAdded === true;
+                const isBought = _itagState.bought;
+                const isSelected = _itagState.selected;
+                const isFixed = isSold || isBought || isSelected;
                 const isGray = !isSelected && !isBought && !isSold && ratioValue < 4.5;
-                // 优先级：已卖出 > 已买入 > 持有 > 手动选中
+                // 优先级：已卖出 > 已买入 > 持有
                 let itemClass = 'auction-item';
                 if (isSold) {
-                    itemClass = 'auction-item sold'; // 卖出状态显示浅灰色（最高优先级）
-                } else if (isConfirmedSold) {
-                    itemClass = 'auction-item'; // 已确认卖出但当天不是"手动标记已卖出"这一行为本身：常规展示，不加背景
-                } else if (isBought && !isObsInheritedBought) {
-                    itemClass = 'auction-item bought'; // 当天手动买入：浅红色
-                } else if (isSelected && isFixed) {
-                    itemClass = 'auction-item selected'; // 持有状态（固定）显示浅紫色
-                } else if (isSelected && !isFixed) {
-                    itemClass = 'auction-item manual-selected'; // 手动选中显示浅橙色
+                    itemClass = 'auction-item sold';
+                } else if (isBought) {
+                    itemClass = 'auction-item bought';
+                } else if (isSelected) {
+                    itemClass = 'auction-item selected';
                 }
                 // 竞放量高光（今日竞价量/昨日竞价量 >= 1.5）：仅在"环比"开关打开时才显示
                 // 平行高光（今日竞价量>T-1竞价量 且 T-1成交量>T-2成交量）：仅在"平行"开关打开且"竞/昨"未开启时才显示，优先于竞放量高光
@@ -881,40 +872,33 @@
                     volumeHtml = `<a href="${duibanTushiLink}" target="_blank" style="color:inherit;text-decoration:none;" onclick="event.stopPropagation()">${volumeDisplay}</a>`;
                 }
 
-                // 观察组标记：
-                // · "*"：上一交易日"竞/昨"达标、且用户自己已在当日列表中导入的股票（原有逻辑，仅在"竞/昨"关闭的置顶展示下有意义）
-                // · 蓝色小号上标"观"：并非用户导入、纯靠观察组机制补入列表，但今天又重新达标的股票——
-                //   用于在"竞/昨"打开、观察组与常规组合并展示时，仍能一眼识别出它不是用户主动导入的
+                // 股票名保持干净，标签放到独立角标区域
                 const _isObs = _obsStocks && item.stock && _obsStocks.has(item.stock.trim());
                 const _isAutoAdded = item.stock && _autoAddedSet.has(item.stock.trim());
                 const _matchesTodayForTag = jingYestToggleChecked && jingYestHighlightSet && item.stock && jingYestHighlightSet.has(item.stock.trim());
                 let _stockNameDisplay = item.stock || '-';
-                if (jingYestToggleChecked && _isObs && _isAutoAdded && _matchesTodayForTag) {
-                    _stockNameDisplay += '<sup style="color:#3b82f6;font-size:10px;font-weight:700;">观</sup>';
-                } else if (!jingYestToggleChecked && _isObs && !_isAutoAdded) {
+                if (!jingYestToggleChecked && _isObs && !_isAutoAdded) {
                     _stockNameDisplay += '*';
                 }
-                // 交易监管标记：严重异常波动
-                if (item.monitorWarning) {
-                    _stockNameDisplay += '<span style="color:#dc2626;font-size:13px;margin-left:2px;" title="严重异常波动">⚠️</span>';
+                // 构建角标 HTML（观/买/卖/持），独立于股票名
+                let _badgeHtml = '';
+                if (jingYestToggleChecked && _isObs && _isAutoAdded && _matchesTodayForTag) {
+                    _badgeHtml += '<span class="auction-badge badge-obs" title="观察组自动补入">观</span>';
                 }
-                // 买入/持有标记：名称后红色上标"买"或蓝色上标"持"（昨日买未卖继承来的 或 今天手动标记的，都显示；
-                // 背景只给今天手动买入的——见上方 isObsInheritedBought 的判断）
-                // 优先用今天的实时标签（isBought/isSelected/isSold 来自 getStocksData()[window.currentDate] 的实时同步，
-                // 见 13517/17561 行）判断显示"买"还是"持"——而不是只看 _obsBoughtSet（继承那一刻的静态快照）。
-                // 这样如果继承进来后又用"复制到交易日"把标签变成了"持"，或者当天改了标签，上标能跟着更新，
-                // 不会一直固定显示成继承时的"买"。已卖出（isSold）则完全不显示这个上标。
-                const _isObsBought = !isConfirmedSold && item.stock && _obsBoughtSet.has(item.stock.trim());
-                if (!isSold && !isConfirmedSold) {
-                    if (isSelected) {
-                        _stockNameDisplay += '<sup style="color:#2563eb;font-size:10px;font-weight:700;margin-left:2px;">持</sup>';
-                    } else if (_isObsBought || isBought) {
-                        _stockNameDisplay += '<sup style="color:#dc2626;font-size:10px;font-weight:700;margin-left:2px;">买</sup>';
-                    }
+                if (item.monitorWarning) {
+                    _badgeHtml += '<span class="auction-badge badge-warn" title="严重异常波动">⚠</span>';
+                }
+                if (isSold) {
+                    _badgeHtml += '<span class="auction-badge badge-sell">卖</span>';
+                } else if (isBought) {
+                    _badgeHtml += '<span class="auction-badge badge-buy">买</span>';
+                } else if (isSelected) {
+                    _badgeHtml += '<span class="auction-badge badge-hold">持</span>';
                 }
                 
                 return `
                     <div class="${itemClass}" data-index="${index}" data-stock="${item.stock || ''}">
+                        <div class="auction-badges">${_badgeHtml}</div>
                         <div class="${numberClass}" data-index="${index}">${displayNum}</div>
                         <div class="${stockClass} auction-note-trigger"${noteAttr}>${_stockNameDisplay}</div>
                         <div class="auction-volume">${volumeHtml}</div>

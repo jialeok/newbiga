@@ -60,32 +60,37 @@
     function buildDisplayStockHtml(item, ctx) {
         let html = item.stock || '-';
         const name = item.stock ? item.stock.trim() : '';
-        const _tagState = window.deriveAuctionTagState(name, ctx.date || window.currentDate, ctx.tagCache);
-        const isConfirmedSold = _tagState.sold || ctx.confirmedSoldSet.has(name);
-        const isSelected = !isConfirmedSold && (_tagState.selected || item.selected === true);
-        const isBought = !isConfirmedSold && _tagState.bought;
         const _isObs = ctx.obsStocks && ctx.obsStocks.has(name);
         const _isAutoAdded = ctx.autoAddedSet.has(name);
-        const _matchesToday = ctx.jingYestToggleChecked && ctx.jingYestHighlightSet && ctx.jingYestHighlightSet.has(name);
-        if (ctx.jingYestToggleChecked && _isObs && _isAutoAdded && _matchesToday) {
-            html += '<sup style="color:#3b82f6;font-size:10px;font-weight:700;">观</sup>';
-        } else if (!ctx.jingYestToggleChecked && _isObs && !_isAutoAdded) {
+        if (!ctx.jingYestToggleChecked && _isObs && !_isAutoAdded) {
             html += '*';
-        }
-        if (item.monitorWarning) {
-            html += '<span style="color:#dc2626;font-size:13px;margin-left:2px;" title="严重异常波动">⚠️</span>';
-        }
-        const _isObsBought = !isConfirmedSold && ctx.obsBoughtSet.has(name);
-        if (!_tagState.sold && !isConfirmedSold) {
-            if (isSelected) {
-                html += '<sup style="color:#2563eb;font-size:10px;font-weight:700;margin-left:2px;">持</sup>';
-            } else if (_isObsBought || isBought) {
-                html += '<sup style="color:#dc2626;font-size:10px;font-weight:700;margin-left:2px;">买</sup>';
-            }
         }
         return html;
     }
     window.buildDisplayStockHtml = buildDisplayStockHtml;
+
+    function buildBadgeHtml(item, ctx, tagState) {
+        const name = item.stock ? item.stock.trim() : '';
+        const _isObs = ctx.obsStocks && ctx.obsStocks.has(name);
+        const _isAutoAdded = ctx.autoAddedSet.has(name);
+        const _matchesToday = ctx.jingYestToggleChecked && ctx.jingYestHighlightSet && ctx.jingYestHighlightSet.has(name);
+        let html = '';
+        if (ctx.jingYestToggleChecked && _isObs && _isAutoAdded && _matchesToday) {
+            html += '<span class="auction-badge badge-obs" title="观察组自动补入">观</span>';
+        }
+        if (item.monitorWarning) {
+            html += '<span class="auction-badge badge-warn" title="严重异常波动">⚠</span>';
+        }
+        if (tagState.sold) {
+            html += '<span class="auction-badge badge-sell">卖</span>';
+        } else if (tagState.bought) {
+            html += '<span class="auction-badge badge-buy">买</span>';
+        } else if (tagState.selected) {
+            html += '<span class="auction-badge badge-hold">持</span>';
+        }
+        return html;
+    }
+    window.buildBadgeHtml = buildBadgeHtml;
 
     function enrichAuctionItem(item, index, ctx) {
         const volume = parseFloat(item.volume) || 0;
@@ -112,21 +117,17 @@
         const isHighlight = ratioValue >= 10;
         const isHighlightLight = ratioValue >= 4.5 && ratioValue < 10;
         const name = item.stock ? item.stock.trim() : '';
-        const _tagState = window.deriveAuctionTagState(name, ctx.date || window.currentDate, ctx.tagCache);
-        const isConfirmedSold = _tagState.sold || ctx.confirmedSoldSet.has(name);
-        const isSelected = !isConfirmedSold && (_tagState.selected || item.selected === true);
-        const isBought = !isConfirmedSold && _tagState.bought;
+        const _tagState = window.getAuctionTagState(name, ctx.date || window.currentDate);
         const isSold = _tagState.sold;
-        const isFixed = _tagState.sold || _tagState.bought || _tagState.selected;
-        const isObsInheritedBought = isBought && item.obsAutoAdded === true;
+        const isBought = _tagState.bought;
+        const isSelected = _tagState.selected;
+        const isFixed = isSold || isBought || isSelected;
         const isGray = !isSelected && !isBought && !isSold && ratioValue < 4.5;
 
         let itemClass = 'auction-item';
         if (isSold) itemClass = 'auction-item sold';
-        else if (isConfirmedSold) itemClass = 'auction-item';
-        else if (isBought && !isObsInheritedBought) itemClass = 'auction-item bought';
-        else if (isSelected && isFixed) itemClass = 'auction-item selected';
-        else if (isSelected && !isFixed) itemClass = 'auction-item manual-selected';
+        else if (isBought) itemClass = 'auction-item bought';
+        else if (isSelected) itemClass = 'auction-item selected';
 
         const isJingYestMatch = ctx.jingYestToggleChecked && ctx.jingYestHighlightSet && ctx.jingYestHighlightSet.has(name);
         const isParallelMatch = ctx.sortByParallelEnabled && !ctx.jingYestToggleChecked && ctx.parallelStocksToday.has(name);
@@ -173,7 +174,8 @@
             volumeDisplay, volumeHtml, yestVolumeDisplay, ratio, ratioArrow, ratioValue,
             note: displayNote || '',
             displayStockHtml: window.buildDisplayStockHtml(item, ctx),
-            isBought, isSelected, isSold, isConfirmedSold
+            badgeHtml: window.buildBadgeHtml(item, ctx, _tagState),
+            isBought, isSelected, isSold
         };
     }
     window.enrichAuctionItem = enrichAuctionItem;
@@ -985,6 +987,7 @@
         },
         template: `
             <div :class="item.itemClass" :data-index="item.index" :data-stock="item.stock">
+                <div class="auction-badges" v-html="item.badgeHtml"></div>
                 <div :class="item.numberClass" :data-index="item.index" style="cursor:pointer;" @click="window.onNumberClick">{{ displayNum }}</div>
                 <div ref="nameEl" :class="item.stockClass + ' auction-note-trigger'" style="cursor:pointer;" :data-note="item.note || ''" v-html="item.displayStockHtml"
                      v-longpress="window.onNameLongPress" @click="window.onNameClick" @dblclick="window.onNameDblClick" @contextmenu="window.onNameContext"></div>

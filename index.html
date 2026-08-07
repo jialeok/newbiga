@@ -2401,7 +2401,32 @@
             display: flex;
             border-bottom: 1px solid #f1f5f9;
             transition: background 0.2s;
+            position: relative;
         }
+
+        .auction-badges {
+            position: absolute;
+            top: 1px;
+            right: 2px;
+            z-index: 2;
+            display: flex;
+            gap: 2px;
+            pointer-events: none;
+        }
+
+        .auction-badge {
+            font-size: 9px;
+            font-weight: 700;
+            line-height: 1;
+            padding: 1px 3px;
+            border-radius: 3px;
+        }
+
+        .badge-obs { color: #3b82f6; background: #dbeafe; }
+        .badge-warn { color: #dc2626; background: #fef2f2; }
+        .badge-buy { color: #fff; background: #dc2626; }
+        .badge-sell { color: #fff; background: #6b7280; }
+        .badge-hold { color: #fff; background: #2563eb; }
 
         .auction-item:last-child {
             border-bottom: none;

@@ -385,7 +385,7 @@
                     let rowClass = 'auction-topic-row';
                     if (auctionItem) {
                         // 方案 B：标签从 stocksData 实时派生，不读 auctionItem.bought/sold/fixed
-                        const _ts2 = window.deriveAuctionTagState(auctionItem.stock.trim(), window.currentDate);
+                        const _ts2 = window.getAuctionTagState(auctionItem.stock.trim(), window.currentDate);
                         if (_ts2.sold) {
                             rowClass = 'auction-topic-row sold';
                         } else if (_ts2.bought) {
@@ -2869,11 +2869,82 @@
             }, 80);
         }
 
-        // 显示买入提示
+        // ============================================================
+        // 竞价看板独立标签系统（与股票卡片列表解耦）
+        // 存储：localStorage["auctionBoardTags"] = { "2026-08-07": { "大晟文化": "buy", ... } }
+        // 标签值：'buy' | 'sell' | 'hold' | null
+        // ============================================================
+        function _loadAuctionTags() {
+            try { return JSON.parse(localStorage.getItem('auctionBoardTags') || '{}'); }
+            catch (e) { return {}; }
+        }
+        function _saveAuctionTags(tags) {
+            try { localStorage.setItem('auctionBoardTags', JSON.stringify(tags)); } catch (e) {}
+        }
+        function setAuctionTag(date, stockName, tag) {
+            if (!date || !stockName) return;
+            const tags = _loadAuctionTags();
+            if (!tags[date]) tags[date] = {};
+            if (tag) tags[date][stockName.trim()] = tag;
+            else delete tags[date][stockName.trim()];
+            _saveAuctionTags(tags);
+        }
+        function getAuctionTag(date, stockName) {
+            if (!date || !stockName) return null;
+            const tags = _loadAuctionTags();
+            return (tags[date] && tags[date][stockName.trim()]) || null;
+        }
+        function getAuctionTagState(stockName, date) {
+            const tag = getAuctionTag(date || window.currentDate, stockName);
+            return {
+                bought: tag === 'buy',
+                sold: tag === 'sell',
+                selected: tag === 'hold',
+                source: tag ? 'auction' : 'none'
+            };
+        }
+        window.setAuctionTag = setAuctionTag;
+        window.getAuctionTag = getAuctionTag;
+        window.getAuctionTagState = getAuctionTagState;
+
+        // 长按弹出标签选择（买/卖/持有/清除），不影响股票卡片列表
         export function showAuctionBuyPrompt(stockName) {
-            if (confirm(`是否将 "${stockName}" 添加到股票列表并标记为已买入？`)) {
-                window.addStockFromAuction(stockName);
-            }
+            const date = window.currentDate;
+            const currentTag = getAuctionTag(date, stockName);
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
+            const popup = document.createElement('div');
+            popup.style.cssText = 'background:#1e293b;border-radius:12px;padding:20px;min-width:260px;box-shadow:0 8px 32px rgba(0,0,0,0.3);';
+            const title = document.createElement('div');
+            title.style.cssText = 'color:#e2e8f0;font-size:15px;font-weight:600;margin-bottom:16px;text-align:center;';
+            title.textContent = stockName + '（添加标签）';
+            popup.appendChild(title);
+            const btns = [
+                { label: '买', tag: 'buy', color: '#dc2626', bg: '#fef2f2' },
+                { label: '卖', tag: 'sell', color: '#6b7280', bg: '#f3f4f6' },
+                { label: '持有', tag: 'hold', color: '#2563eb', bg: '#eff6ff' },
+                { label: '清除', tag: null, color: '#64748b', bg: '#f8fafc' }
+            ];
+            btns.forEach(b => {
+                const btn = document.createElement('button');
+                const isActive = currentTag === b.tag;
+                btn.style.cssText = `display:block;width:100%;padding:10px;margin-bottom:8px;border:1px solid ${isActive ? b.color : '#334155'};border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;background:${isActive ? b.color : '#0f172a'};color:${isActive ? '#fff' : b.color};`;
+                btn.textContent = b.label + (isActive ? ' ✓' : '');
+                btn.onclick = function() {
+                    setAuctionTag(date, stockName, b.tag);
+                    document.body.removeChild(overlay);
+                    window.renderAuction(window.currentGroup);
+                };
+                popup.appendChild(btn);
+            });
+            const cancelBtn = document.createElement('button');
+            cancelBtn.style.cssText = 'display:block;width:100%;padding:10px;border:none;border-radius:8px;font-size:14px;cursor:pointer;background:#334155;color:#94a3b8;';
+            cancelBtn.textContent = '取消';
+            cancelBtn.onclick = function() { document.body.removeChild(overlay); };
+            popup.appendChild(cancelBtn);
+            overlay.appendChild(popup);
+            overlay.onclick = function(e) { if (e.target === overlay) document.body.removeChild(overlay); };
+            document.body.appendChild(overlay);
         }
         
         // 从竞价看板添加股票到列表

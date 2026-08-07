@@ -1289,7 +1289,18 @@
                 window._dbgLog('[AUCTION-DEBUG] window.getTodayGroupList(' + dataSource + ') currentDate=' + currentDate +
                     ' 原始' + list.length + '条 → 正式列表' + result.length + '条，被过滤' + filteredOut.length + '条：' + filteredOut.join(', '));
             }
-            return result;
+            // 清理：去除名称末尾"观"的重复条目（旧版代码遗留的数据脏污）
+            const seenNames = new Set();
+            const cleaned = [];
+            for (let i = 0; i < result.length; i++) {
+                const name = result[i].stock.trim();
+                const cleanName = name.endsWith('观') ? name.slice(0, -1) : name;
+                if (seenNames.has(cleanName)) continue;
+                seenNames.add(cleanName);
+                if (name !== cleanName) result[i].stock = cleanName;
+                cleaned.push(result[i]);
+            }
+            return cleaned;
         }
 
         const buildTopicCache = window.buildTopicCache;
