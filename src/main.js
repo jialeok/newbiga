@@ -40,6 +40,12 @@
                 window.pullDailyHighlights().then(function() {
                     window.renderAuction();
                 }).catch(function(e) { window._dbgLog('[AUCTION-ERR] daily_highlights 加载失败 ' + (e && e.message || e)); });
+                // 快速加载当天竞价变化数据（单日查询，秒开），不必等 pullFromCloud 全量拉取
+                if (typeof window.pullBiddingForDate === 'function') {
+                    window.pullBiddingForDate(window.currentDate).then(function() {
+                        if (typeof window.renderBidding === 'function') window.renderBidding();
+                    }).catch(function(e) { window._dbgLog('[BIDDING] 首屏快速加载失败 ' + (e && e.message || e)); });
+                }
                 // 热门股票数据存在独立的 hot_stocks 表中，不在 pullFromCloud() 拉取的 user_data blob 里，
                 // 必须单独加载，否则刷新页面后"热门股票"分组会一直显示为空（数据其实还在云端）
                 // （Realtime 订阅已在上面的 startSessionPoll() 里启动，这里只需要补上遗漏的初始数据加载）

@@ -475,22 +475,27 @@
     const existing = boardStore.earlyEtf;
     if (existing && existing.sector_etf_close === closeVal && existing.sector_etf_synced_at) return;
 
-    // 防窜日期：仅当 existing.date 与当前日期一致时才继承其字段
-    const safeExisting = (existing && existing.date === date) ? existing : {};
-    const total = safeExisting.shuliang ? parseInt(safeExisting.shuliang, 10) || 48 : 48;
-    const die = Math.max(0, total - zhang);
+    // 用 update 而非 upsert，只更新统计字段，不碰 tushi/jingtu/comment
+    const sb = window.getDashboardsSupabase();
+    const now = window.formatNowIso();
+    const { data: updData, error: updErr } = await sb
+      .from('early_etf_data')
+      .update({
+        zhang_count: zhang,
+        die_zhangbi: window.buildDieZhangbi(Math.max(0, 48 - zhang), zhang),
+        sector_etf_close: closeVal,
+        sector_etf_synced_at: now,
+        updated_at: now
+      })
+      .eq('date', date)
+      .select()
+      .maybeSingle();
+    if (updErr) throw updErr;
+    if (updData) {
+      boardStore.earlyEtf = updData;
+      window.syncToLegacyStorage();
+    }
 
-    await window.saveEarlyEtf({
-      shuliang: String(total),
-      die_count: die,
-      zhang_count: zhang,
-      die_zhangbi: window.buildDieZhangbi(die, zhang),
-      jingtu: safeExisting.jingtu || '',
-      tushi: safeExisting.tushi || '',
-      comment: safeExisting.comment || '',
-      sector_etf_close: closeVal,
-      sector_etf_synced_at: window.formatNowIso()
-    });
     window.toast('✅ 已根据竞价变化板块ETF收盘同步 ETF 数据', true);
   }
   window.trySyncEtfFromBiddingClose = trySyncEtfFromBiddingClose;
@@ -881,19 +886,45 @@
     recalcDuibanFromAuction: async (total, fallCount, riseCount) => {
       // 由外部早盘竞价统计调用，直接原子写入 recent_multi_data
       if (!boardStore.currentDate) return;
-      // 防窜日期：仅当 boardStore.recentMulti 的 date 与当前日期一致时才继承其字段，
-      // 否则 loadRecentMulti 尚未完成（异步），boardStore.recentMulti 仍是前一日期的数据，
-      // 把旧日期的 tushi/jingtu/comment 写到新日期 → 未来日期显示其他日期的石墨链接
-      const existing = (boardStore.recentMulti && boardStore.recentMulti.date === boardStore.currentDate) ? boardStore.recentMulti : {};
-      await window.saveRecentMulti({
-        shuliang: String(total),
-        die_count: fallCount,
-        zhang_count: riseCount,
-        die_zhangbi: window.buildDieZhangbi(fallCount, riseCount),
-        jingtu: existing.jingtu || '',
-        tushi: existing.tushi || '',
-        comment: existing.comment || ''
-      });
+      const date = boardStore.currentDate;
+      const sb = window.getDashboardsSupabase();
+      const now = window.formatNowIso();
+      // 用 update 而非 upsert，只更新统计字段，不碰 tushi/jingtu/comment
+      // 这样即使 loadRecentMulti 尚未完成，也不会用空字符串覆盖已有的图示链接
+      const { data: updData, error: updErr } = await sb
+        .from('recent_multi_data')
+        .update({
+          shuliang: String(total),
+          die_count: fallCount,
+          zhang_count: riseCount,
+          die_zhangbi: window.buildDieZhangbi(fallCount, riseCount),
+          updated_at: now
+        })
+        .eq('date', date)
+        .select()
+        .maybeSingle();
+      if (updErr) throw updErr;
+      if (!updData) {
+        // 行不存在 → upsert 创建（新行 tushi/jingtu/comment 为空是正确的）
+        const { data: insData, error: insErr } = await sb
+          .from('recent_multi_data')
+          .upsert({
+            date,
+            shuliang: String(total),
+            die_count: fallCount,
+            zhang_count: riseCount,
+            die_zhangbi: window.buildDieZhangbi(fallCount, riseCount),
+            jingtu: '', tushi: '', comment: '',
+            updated_at: now
+          }, { onConflict: 'date' })
+          .select()
+          .single();
+        if (insErr) throw insErr;
+        boardStore.recentMulti = insData;
+      } else {
+        boardStore.recentMulti = updData;
+      }
+      window.syncToLegacyStorage();
     },
     syncSectorEtfZhangNum: async (zhangNum) => {
       // 由外部竞价变化保存/抓取调用，直接原子写入 early_etf_data
@@ -902,21 +933,27 @@
       const _today = (typeof window._getLocalTodayStr === 'function') ? window._getLocalTodayStr() : '';
       if (_today && boardStore.currentDate > _today) return;
       const zhang = parseInt(zhangNum, 10) || 0;
-      // 防窜日期：同 recalcDuibanFromAuction，仅当 existing.date 与当前日期一致时才继承
-      const existing = (boardStore.earlyEtf && boardStore.earlyEtf.date === boardStore.currentDate) ? boardStore.earlyEtf : {};
-      const total = existing.shuliang ? parseInt(existing.shuliang, 10) || 48 : 48;
-      const die = Math.max(0, total - zhang);
-      await window.saveEarlyEtf({
-        shuliang: String(total),
-        die_count: die,
-        zhang_count: zhang,
-        die_zhangbi: window.buildDieZhangbi(die, zhang),
-        jingtu: existing.jingtu || '',
-        tushi: existing.tushi || '',
-        comment: existing.comment || '',
-        sector_etf_close: String(zhang),
-        sector_etf_synced_at: window.formatNowIso()
-      });
+      const date = boardStore.currentDate;
+      const sb = window.getDashboardsSupabase();
+      const now = window.formatNowIso();
+      // 用 update 而非 upsert，只更新统计字段，不碰 tushi/jingtu/comment
+      const { data: updData, error: updErr } = await sb
+        .from('early_etf_data')
+        .update({
+          zhang_count: zhang,
+          die_zhangbi: window.buildDieZhangbi(Math.max(0, 48 - zhang), zhang),
+          sector_etf_close: String(zhang),
+          sector_etf_synced_at: now,
+          updated_at: now
+        })
+        .eq('date', date)
+        .select()
+        .maybeSingle();
+      if (updErr) throw updErr;
+      if (updData) {
+        boardStore.earlyEtf = updData;
+        window.syncToLegacyStorage();
+      }
     },
     openRecentMultiModal: () => window.dispatchBoardDblClick('#duiban-vue-root'),
     openEtfModal: () => window.dispatchBoardDblClick('#etf-vue-root')
