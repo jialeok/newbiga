@@ -242,8 +242,7 @@
                     if (window.currentDate !== _sideEffectDate) return;
                     // 观察组自动继承：将上一交易日"竞/昨"达标股票自动添加到当日列表
                     window.ensureObservationStocks(_sideEffectDate);
-                    // 买入股票进次日观察组：昨日"买了还没卖"的股票自动进今日观察组（名称后带"买"字）
-                    window.ensureBoughtStocksForDate(_sideEffectDate);
+                    // 买/卖/持标签继承已改为独立存储（auctionBoardTags），不再调 ensureBoughtStocksForDate
                     // 每次渲染早盘竞价看板时，顺带重新计算一次"最近多板"统计，保证两个看板实时同步
                     window.recalcDuibanFromAuction();
                 };

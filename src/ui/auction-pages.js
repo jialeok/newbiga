@@ -2870,9 +2870,11 @@
         }
 
         // ============================================================
-        // 竞价看板独立标签系统（与股票卡片列表解耦）
+        // 竞价看板独立标签系统（与股票卡片列表完全解耦）
         // 存储：localStorage["auctionBoardTags"] = { "2026-08-07": { "大晟文化": "buy", ... } }
-        // 标签值：'buy' | 'sell' | 'hold' | null
+        // 标签值：'buy' | 'sell' | 'hold' | 'cancel'
+        // 角标显示：D 日角标由 D-1（前一交易日）的 tag 决定（被动展示）
+        // 继承：D 日选 buy/sell/hold → D+1 自动加入竞价列表并显示角标；选 cancel 或不操作 → 不继承
         // ============================================================
         function _loadAuctionTags() {
             try { return JSON.parse(localStorage.getItem('auctionBoardTags') || '{}'); }
@@ -2894,54 +2896,79 @@
             const tags = _loadAuctionTags();
             return (tags[date] && tags[date][stockName.trim()]) || null;
         }
+        // 角标状态：从前一交易日的 tag 派生（被动展示）
         function getAuctionTagState(stockName, date) {
-            const tag = getAuctionTag(date || window.currentDate, stockName);
+            const d = date || window.currentDate;
+            const prevDay = window.getPreviousTradingDay ? window.getPreviousTradingDay(d) : null;
+            const tag = prevDay ? getAuctionTag(prevDay, stockName) : null;
             return {
                 bought: tag === 'buy',
                 sold: tag === 'sell',
                 selected: tag === 'hold',
-                source: tag ? 'auction' : 'none'
+                source: tag ? 'inherited' : 'none'
             };
+        }
+        // 当日选择（用于弹窗高亮）
+        function getAuctionTagChoice(stockName, date) {
+            return getAuctionTag(date || window.currentDate, stockName);
+        }
+        // 选 buy/sell/hold 时自动添加到次日竞价列表
+        function _ensureStockInNextDay(stockName, date) {
+            const nextDay = window.getNextTradingDay ? window.getNextTradingDay(date) : null;
+            if (!nextDay) return;
+            const auctionData = window.getAuctionData();
+            const dayList = auctionData[nextDay] || [];
+            const exists = dayList.some(function(s) { return s && s.stock && s.stock.trim() === stockName.trim(); });
+            if (!exists) {
+                dayList.push({ stock: stockName.trim(), code: window.getStockCode ? window.getStockCode(stockName) : '', volume: '', yestVolume: '', note: '', obsAutoAdded: true });
+                auctionData[nextDay] = dayList;
+                window.setAuctionDateData(nextDay, dayList, 'auctionBoardTags');
+                if (window._addAuctionWatchlistMember) window._addAuctionWatchlistMember(nextDay, stockName.trim());
+            }
         }
         window.setAuctionTag = setAuctionTag;
         window.getAuctionTag = getAuctionTag;
         window.getAuctionTagState = getAuctionTagState;
+        window.getAuctionTagChoice = getAuctionTagChoice;
 
-        // 长按弹出标签选择（买/卖/持有/清除），不影响股票卡片列表
+        // 长按弹出标签选择（买入/卖出/持有/取消次日观察），不影响股票卡片列表
         export function showAuctionBuyPrompt(stockName) {
             const date = window.currentDate;
-            const currentTag = getAuctionTag(date, stockName);
+            const currentChoice = getAuctionTagChoice(stockName, date);
             const overlay = document.createElement('div');
             overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
             const popup = document.createElement('div');
-            popup.style.cssText = 'background:#1e293b;border-radius:12px;padding:20px;min-width:260px;box-shadow:0 8px 32px rgba(0,0,0,0.3);';
+            popup.style.cssText = 'background:#1e293b;border-radius:12px;padding:20px;min-width:280px;box-shadow:0 8px 32px rgba(0,0,0,0.3);';
             const title = document.createElement('div');
             title.style.cssText = 'color:#e2e8f0;font-size:15px;font-weight:600;margin-bottom:16px;text-align:center;';
-            title.textContent = stockName + '（添加标签）';
+            title.textContent = stockName;
             popup.appendChild(title);
             const btns = [
-                { label: '买', tag: 'buy', color: '#dc2626', bg: '#fef2f2' },
-                { label: '卖', tag: 'sell', color: '#6b7280', bg: '#f3f4f6' },
-                { label: '持有', tag: 'hold', color: '#2563eb', bg: '#eff6ff' },
-                { label: '清除', tag: null, color: '#64748b', bg: '#f8fafc' }
+                { label: '买入', tag: 'buy', color: '#dc2626' },
+                { label: '卖出', tag: 'sell', color: '#6b7280' },
+                { label: '持有', tag: 'hold', color: '#2563eb' },
+                { label: '取消次日观察', tag: 'cancel', color: '#64748b' }
             ];
-            btns.forEach(b => {
+            btns.forEach(function(b) {
                 const btn = document.createElement('button');
-                const isActive = currentTag === b.tag;
-                btn.style.cssText = `display:block;width:100%;padding:10px;margin-bottom:8px;border:1px solid ${isActive ? b.color : '#334155'};border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;background:${isActive ? b.color : '#0f172a'};color:${isActive ? '#fff' : b.color};`;
-                btn.textContent = b.label + (isActive ? ' ✓' : '');
+                const isActive = currentChoice === b.tag;
+                btn.style.cssText = 'display:block;width:100%;padding:10px;margin-bottom:8px;border:1px solid ' + (isActive ? b.color : '#334155') + ';border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;background:' + (isActive ? b.color : '#0f172a') + ';color:' + (isActive ? '#fff' : b.color) + ';';
+                btn.textContent = b.label + (isActive ? ' \u2713' : '');
                 btn.onclick = function() {
                     setAuctionTag(date, stockName, b.tag);
+                    if (b.tag === 'buy' || b.tag === 'sell' || b.tag === 'hold') {
+                        _ensureStockInNextDay(stockName, date);
+                    }
                     document.body.removeChild(overlay);
                     window.renderAuction(window.currentGroup);
                 };
                 popup.appendChild(btn);
             });
-            const cancelBtn = document.createElement('button');
-            cancelBtn.style.cssText = 'display:block;width:100%;padding:10px;border:none;border-radius:8px;font-size:14px;cursor:pointer;background:#334155;color:#94a3b8;';
-            cancelBtn.textContent = '取消';
-            cancelBtn.onclick = function() { document.body.removeChild(overlay); };
-            popup.appendChild(cancelBtn);
+            const closeBtn = document.createElement('button');
+            closeBtn.style.cssText = 'display:block;width:100%;padding:10px;border:none;border-radius:8px;font-size:14px;cursor:pointer;background:#334155;color:#94a3b8;';
+            closeBtn.textContent = '关闭';
+            closeBtn.onclick = function() { document.body.removeChild(overlay); };
+            popup.appendChild(closeBtn);
             overlay.appendChild(popup);
             overlay.onclick = function(e) { if (e.target === overlay) document.body.removeChild(overlay); };
             document.body.appendChild(overlay);
