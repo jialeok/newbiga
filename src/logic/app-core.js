@@ -3558,7 +3558,12 @@
                 }
 
                 // 收集 thscode
-                const scMap = window._scMapCache || {};
+                let scMap = window._scMapCache || {};
+                if (Object.keys(scMap).length === 0 && typeof window.loadCloudStockCodeMap === 'function') {
+                    try { await window.loadCloudStockCodeMap(); }
+                    catch (e) { window._dbgLog('[THS-FIX] 按需加载代码映射失败: ' + (e && e.message)); }
+                    scMap = window._scMapCache || {};
+                }
                 const stockMap = {}; // thscode -> stock 对象
                 const thscodes = [];
                 todayList.forEach(function(s) {
@@ -3573,7 +3578,10 @@
                 });
 
                 if (thscodes.length === 0) {
-                    window.setApiStatus('thsApiStatus', '❌ 没有可查询的股票（缺少代码映射，请先获取最近多板）', false);
+                    const hasCodeInList = todayList.some(function(s) { return s && s.code; });
+                    window.setApiStatus('thsApiStatus', hasCodeInList
+                        ? '❌ 股票列表有代码但无法转为同花顺代码，请检查代码格式'
+                        : '❌ 没有可查询的股票（列表中股票无代码，且代码映射为空；请先导入代码映射）', false);
                     return;
                 }
 
@@ -5470,7 +5478,12 @@
                 }
 
                 // 收集 thscode
-                const scMap = window._scMapCache || {};
+                let scMap = window._scMapCache || {};
+                if (Object.keys(scMap).length === 0 && typeof window.loadCloudStockCodeMap === 'function') {
+                    try { await window.loadCloudStockCodeMap(); }
+                    catch (e) { window._dbgLog('[THS-FIX] 按需加载代码映射失败: ' + (e && e.message)); }
+                    scMap = window._scMapCache || {};
+                }
 
                 // [BUG-FIX] 收集所有云端写入Promise，统一await并收集错误
                 const _cloudTasks = [];
@@ -5512,7 +5525,10 @@
                 });
 
                 if (thscodes.length === 0) {
-                    window.setApiStatus('thsApiStatusHot', '❌ 没有可查询的股票（缺少代码映射，请先通过「昨日涨停连板」或「获取飙升+热股」导入股票，或导入代码映射）', false);
+                    const hasCodeInList = todayList.some(function(s) { return s && s.code; });
+                    window.setApiStatus('thsApiStatusHot', hasCodeInList
+                        ? '❌ 股票列表有代码但无法转为同花顺代码，请检查代码格式'
+                        : '❌ 没有可查询的股票（列表中股票无代码，且代码映射为空；请先导入代码映射）', false);
                     return;
                 }
 
