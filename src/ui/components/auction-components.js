@@ -458,7 +458,7 @@
                 const isJingYestMatch2 = sortStateP2.byJingYest && signalSetsP2.jingYest && nm && signalSetsP2.jingYest.has(nm);
                 const isParallelMatch2 = sortStateP2.byParallel && !sortStateP2.byJingYest && signalSetsP2.parallel && nm && signalSetsP2.parallel.has(nm);
                 const isHighRatioMatch2 = sortStateP2.byRatio && nm && highRatioInfo2.stockNames.has(nm);
-                const isThreeDayJingDieMatch2 = sortStateP2.byThreeDayJingDie && signalSetsP2.threeDayJingDie && nm && signalSetsP2.threeDayJingDie.has(nm);
+                const isThreeDayJingDieMatch2 = sortStateP2.byThreeDayJingDie && signalSetsP2.threeDayJingDie && nm && (signalSetsP2.threeDayJingDie.get(nm) || 0) >= 2;
                 if (isJingYestMatch2) rowClass += ' jing-yest-match';
                 else if (isParallelMatch2) rowClass += ' parallel-match';
                 else if (isThreeDayJingDieMatch2) rowClass += ' three-day-jing-die';

@@ -856,7 +856,7 @@
                 const isJingYestMatch = jingYestToggleChecked && jingYestHighlightSet && item.stock && jingYestHighlightSet.has(item.stock.trim());
                 const isParallelMatch = sortByParallelEnabled && !jingYestToggleChecked && item.stock && parallelStocksToday.has(item.stock.trim());
                 const isHighRatioMatch = sortByRatioEnabled && item.stock && highRatioToday.stockNames.has(item.stock.trim());
-                const isThreeDayJingDieMatch = sortByThreeDayJingDieEnabled && threeDayJingDieSet && item.stock && threeDayJingDieSet.has(item.stock.trim());
+                const isThreeDayJingDieMatch = sortByThreeDayJingDieEnabled && threeDayJingDieSet && item.stock && (threeDayJingDieSet.get(item.stock.trim()) || 0) >= 2;
                 if (isJingYestMatch) {
                     itemClass += ' jing-yest-match';
                 } else if (isParallelMatch) {

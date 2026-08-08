@@ -422,7 +422,7 @@
                     const isJingYestMatch2 = (sortByJingYestEnabled2 || sortByJingYestRatioEnabled2) && jingYestHighlightSet2 && stock.stock && jingYestHighlightSet2.has(stock.stock.trim());
                     const isParallelMatch2 = sortByParallelEnabled2 && !sortByJingYestEnabled2 && !sortByJingYestRatioEnabled2 && parallelStockNames2 && stock.stock && parallelStockNames2.has(stock.stock.trim());
                     const isHighRatioMatch2 = sortByRatioEnabled2 && stock.stock && highRatioInfo2.stockNames.has(stock.stock.trim());
-                    const isThreeDayJingDieMatch2 = sortByThreeDayJingDieEnabled2 && threeDayJingDieSet2 && stock.stock && threeDayJingDieSet2.has(stock.stock.trim());
+                    const isThreeDayJingDieMatch2 = sortByThreeDayJingDieEnabled2 && threeDayJingDieSet2 && stock.stock && (threeDayJingDieSet2.get(stock.stock.trim()) || 0) >= 2;
                     if (isJingYestMatch2) {
                         rowClass += ' jing-yest-match';
                     } else if (isParallelMatch2) {
