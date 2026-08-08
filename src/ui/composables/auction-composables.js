@@ -189,8 +189,9 @@
 
         function sortPage1RenderOrder(renderOrder, auctionList, ctx) {
             const { sortState, historyCountMap, prevDayMap, signalSets } = ctx;
-            const { highRatio, parallel, jingYest, ratioDiff } = signalSets || {};
+            const { highRatio, parallel, jingYest, ratioDiff, threeDayJingDie } = signalSets || {};
             const jingYestHighlightSet = jingYest;
+            const threeDayJingDieSet = threeDayJingDie;
 
             if (sortState.byData) {
                 return renderOrder.map((idx) => ({
@@ -250,6 +251,23 @@
                 }).map(x => x.idx);
             }
 
+            if (sortState.byThreeDayJingDie) {
+                return renderOrder.map((idx, pos) => {
+                    const nm = auctionList[idx] && auctionList[idx].stock ? auctionList[idx].stock.trim() : '';
+                    const dd = nm && threeDayJingDieSet ? (threeDayJingDieSet.get(nm) || 0) : 0;
+                    const vol = auctionList[idx] ? (parseFloat(auctionList[idx].volume) || 0) : 0;
+                    const yvol = auctionList[idx] ? (parseFloat(auctionList[idx].yestVolume) || 0) : 0;
+                    const jr = (vol > 0 && yvol > 0) ? (vol / yvol) : null;
+                    return { idx, pos, dd, jr };
+                }).sort((a, b) => {
+                    if (a.dd !== b.dd) return b.dd - a.dd;
+                    if (a.jr === null && b.jr === null) return a.pos - b.pos;
+                    if (a.jr === null) return 1;
+                    if (b.jr === null) return -1;
+                    return a.jr - b.jr;
+                }).map(x => x.idx);
+            }
+
             if (sortState.byParallel) {
                 const ps = parallel;
                 const info = ratioDiff;
@@ -297,9 +315,10 @@
 
         function sortPage2GroupStocks(stocks, ctx) {
             const { auctionByName, prevAuctionByName, sortState, signalSets, highRatioInfo } = ctx;
-            const { parallel, jingYest, ratioDiff } = signalSets || {};
+            const { parallel, jingYest, ratioDiff, threeDayJingDie } = signalSets || {};
             const jingYestHighlightSet = jingYest;
             const parallelStockNames = parallel;
+            const threeDayJingDieSet = threeDayJingDie;
 
             if (sortState.byRatio) {
                 return stocks.map((s, pos) => {
@@ -348,6 +367,23 @@
                         return b.jr - a.jr;
                     }
                     return a.pos - b.pos;
+                }).map(x => x.s);
+            }
+
+            if (sortState.byThreeDayJingDie) {
+                return stocks.map((s, pos) => {
+                    const nm = s.stock ? s.stock.trim() : '';
+                    const dd = nm && threeDayJingDieSet ? (threeDayJingDieSet.get(nm) || 0) : 0;
+                    const vol = parseFloat(s.volume) || 0;
+                    const yvol = parseFloat(s.yestVolume) || 0;
+                    const jr = (vol > 0 && yvol > 0) ? (vol / yvol) : null;
+                    return { s, pos, dd, jr };
+                }).sort((a, b) => {
+                    if (a.dd !== b.dd) return b.dd - a.dd;
+                    if (a.jr === null && b.jr === null) return a.pos - b.pos;
+                    if (a.jr === null) return 1;
+                    if (b.jr === null) return -1;
+                    return a.jr - b.jr;
                 }).map(x => x.s);
             }
 

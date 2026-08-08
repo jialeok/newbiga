@@ -49,16 +49,16 @@
 
   function createSortState() {
     return {
-      auction: { byData: false, byRatio: false, byParallel: false, byJingYest: false, byJingYestRatio: false },
-      hot: { byData: false, byRatio: false, byParallel: false, byJingYest: false, byJingYestRatio: false }
+      auction: { byData: false, byRatio: false, byParallel: false, byJingYest: false, byJingYestRatio: false, byThreeDayJingDie: false },
+      hot: { byData: false, byRatio: false, byParallel: false, byJingYest: false, byJingYestRatio: false, byThreeDayJingDie: false }
     };
   }
   window.createSortState = createSortState;
 
   function createSortStateP2() {
     return {
-      auction: { byRatio: false, byParallel: false, byJingYest: false, byJingYestRatio: false },
-      hot: { byRatio: false, byParallel: false, byJingYest: false, byJingYestRatio: false }
+      auction: { byRatio: false, byParallel: false, byJingYest: false, byJingYestRatio: false, byThreeDayJingDie: false },
+      hot: { byRatio: false, byParallel: false, byJingYest: false, byJingYestRatio: false, byThreeDayJingDie: false }
     };
   }
   window.createSortStateP2 = createSortStateP2;

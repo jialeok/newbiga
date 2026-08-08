@@ -410,6 +410,15 @@ async function updateStockCodeMap(env, pairs) {
   // stockCodeMap 存在 localStorage，前端从 auction_watchlist 读取 code 回填
 }
 
+// [BUG-FIX] 读取指定日期的 auction_watchlist 股票列表，用于合并打标签/观察组股票到 worker 抓取名单
+async function readAuctionWatchlistForDate(env, date) {
+  const url = CONFIG.SUPABASE_URL + '/rest/v1/auction_watchlist?date=eq.' + date + '&select=stock,code';
+  const resp = await fetch(url, { headers: sbHeaders(env) });
+  if (!resp.ok) return [];
+  const data = await resp.json();
+  return (data || []).map(r => ({ name: r.stock, code: r.code })).filter(s => s.name && s.code);
+}
+
 // ────── bidding-auto-fetch/logic/holiday-check.js ──────
 // holiday-check.js — 交易日判断（优先 fuyao 交易日历，失败回退本地）
 
@@ -461,24 +470,42 @@ function checkTradingDay(today, logs) {
 // 2. 获取最近多板成分股 + 写入 auction_watchlist
 async function fetchAndWriteWatchlist(env, today, logs) {
   logs.push('步骤1：获取最近多板成分股...');
-  let constituents;
+  let ladderConstituents;
   try {
-    constituents = await fetchLadderConstituents(env);
+    ladderConstituents = await fetchLadderConstituents(env);
   } catch (e) {
     logs.push('获取成分股失败: ' + e.message);
     return { error: '获取成分股失败: ' + e.message };
   }
-  logs.push('成分股数量: ' + constituents.length);
-  if (constituents.length === 0) {
+  logs.push('成分股数量: ' + ladderConstituents.length);
+  if (ladderConstituents.length === 0) {
     return { error: '883410 成分股为空' };
   }
+
+  // [BUG-FIX] 合并前一日 auction_watchlist 表里的额外股票（打标签/观察组），
+  // 确保 worker 也为它们抓取竞价数据，否则观察组股票早上没有数据
+  let constituents = ladderConstituents;
+  try {
+    const recentDays = await getRecentTradingDays(env, today, 2);
+    const prevDay = recentDays.length >= 2 ? recentDays[recentDays.length - 2] : null;
+    if (prevDay) {
+      const prevStocks = await readAuctionWatchlistForDate(env, prevDay);
+      const existingCodes = new Set(ladderConstituents.map(c => c.code));
+      const extraStocks = prevStocks.filter(s => s.code && !existingCodes.has(s.code));
+      if (extraStocks.length > 0) {
+        logs.push('前一日额外股票(打标签/观察组): ' + extraStocks.length + ' 只，合并到抓取名单');
+        constituents = ladderConstituents.concat(extraStocks);
+      }
+    }
+  } catch (e) { logs.push('读取前一日 watchlist 失败(非致命): ' + e.message); }
 
   // 【BUG-FIX】不写 volume/yest_volume/change_pct/note/topics 字段：
   // 这些字段的真实值由步骤4写入 market_metrics 表。如果这里把空串写进 watchlist，
   // 后续每个交易日的 morning 都会用空串覆盖用户在前端手动编辑过的值。
+  // 只为 883410 成分股写入 auction_watchlist（额外股票已在表里，不覆盖 obs_auto_added 等字段）
   logs.push('步骤2：写入 auction_watchlist...');
   const nowIso = new Date().toISOString();
-  const watchlistRows = constituents.map(c => ({
+  const watchlistRows = ladderConstituents.map(c => ({
     date: today,
     stock: c.name,
     code: c.code,

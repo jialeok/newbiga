@@ -3728,11 +3728,8 @@
                     if (!startDate) { noStartDateNames.push(name); return; }
                     const rawGapDates = [];
                     const hadValueDates = []; // 覆盖模式：记录已有涨幅的日期（用于区分"补"和"覆盖"）
-                    let started = false;
                     for (let i = 0; i < windowDates.length; i++) {
                         const dt = windowDates[i];
-                        if (dt === startDate) started = true;
-                        if (!started) continue;
                         const pct = window.getStockHistoryValue(dt, name, 'changePct', 'auction');
                         if (pct === null) {
                             rawGapDates.push(dt);
@@ -3942,11 +3939,8 @@
                     }
                     if (!startDate) { noStartDateNames.push(name); return; }
                     const rawGapDates = [];
-                    let started = false;
                     for (let i = 0; i < windowDates.length; i++) {
                         const dt = windowDates[i];
-                        if (dt === startDate) started = true;
-                        if (!started) continue;
                         const yv = window.getStockHistoryValue(dt, name, 'yestVolume', 'auction');
                         if (yv === null) rawGapDates.push(dt);
                     }
@@ -5627,11 +5621,8 @@
                     // 起始日及之后、到今天为止
                     const rawGapDates = [];
                     const hadValueDates = []; // 覆盖模式：记录已有涨幅的日期
-                    let started = false;
                     for (let i = 0; i < windowDates.length; i++) {
                         const dt = windowDates[i];
-                        if (dt === startDate) started = true;
-                        if (!started) continue;
                         const pct = window.getStockHistoryValue(dt, name, 'changePct', 'hot');
                         if (pct === null) {
                             rawGapDates.push(dt);
@@ -5858,11 +5849,8 @@
                     }
                     if (!startDate) return;
                     const gapDates = [];
-                    let started = false;
                     for (let i = 0; i < windowDates.length; i++) {
                         const dt = windowDates[i];
-                        if (dt === startDate) started = true;
-                        if (!started) continue;
                         const yv = window.getStockHistoryValue(dt, name, 'yestVolume', 'hot');
                         if (yv === null) gapDates.push(dt);
                     }

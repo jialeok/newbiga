@@ -210,11 +210,13 @@
             byRatio: _ss.byRatio,
             byParallel: _ss.byParallel,
             byJingYest: _ss.byJingYest,
-            byJingYestRatio: _ss.byJingYestRatio
+            byJingYestRatio: _ss.byJingYestRatio,
+            byThreeDayJingDie: _ss.byThreeDayJingDie
         };
         const jingYestToggleChecked = sortState.byJingYest || sortState.byJingYestRatio;
 
         const highRatioToday = window.getSignalSets(window.currentDate, dataSource, { parallel: sortState.byParallel, ratioDiff: sortState.byParallel || sortState.byJingYestRatio });
+        highRatioToday.threeDayJingDie = sortState.byThreeDayJingDie ? window.getThreeDayJingDieSet(window.currentDate, dataSource) : null;
         const duibanTushiLink = window.getDuibanTushiLink();
 
         let renderOrder = auctionList.map((it, idx) => idx);
@@ -345,12 +347,14 @@
             byRatio: _ss2.byRatio,
             byParallel: _ss2.byParallel,
             byJingYest: _ss2.byJingYest,
-            byJingYestRatio: _ss2.byJingYestRatio
+            byJingYestRatio: _ss2.byJingYestRatio,
+            byThreeDayJingDie: _ss2.byThreeDayJingDie
         };
         const signalSetsP2 = {
             parallel: sortStateP2.byParallel ? window.getParallelStocksForDate(window.currentDate, dataSource) : null,
             jingYest: window.getJingYestHighlightSetForDate(window.currentDate, dataSource),
-            ratioDiff: (sortStateP2.byParallel || sortStateP2.byJingYestRatio) ? window.getRatioDiffInfoForDate(window.currentDate, dataSource) : null
+            ratioDiff: (sortStateP2.byParallel || sortStateP2.byJingYestRatio) ? window.getRatioDiffInfoForDate(window.currentDate, dataSource) : null,
+            threeDayJingDie: sortStateP2.byThreeDayJingDie ? window.getThreeDayJingDieSet(window.currentDate, dataSource) : null
         };
 
         const stockTopicCount = {};
@@ -454,8 +458,10 @@
                 const isJingYestMatch2 = sortStateP2.byJingYest && signalSetsP2.jingYest && nm && signalSetsP2.jingYest.has(nm);
                 const isParallelMatch2 = sortStateP2.byParallel && !sortStateP2.byJingYest && signalSetsP2.parallel && nm && signalSetsP2.parallel.has(nm);
                 const isHighRatioMatch2 = sortStateP2.byRatio && nm && highRatioInfo2.stockNames.has(nm);
+                const isThreeDayJingDieMatch2 = sortStateP2.byThreeDayJingDie && signalSetsP2.threeDayJingDie && nm && signalSetsP2.threeDayJingDie.has(nm);
                 if (isJingYestMatch2) rowClass += ' jing-yest-match';
                 else if (isParallelMatch2) rowClass += ' parallel-match';
+                else if (isThreeDayJingDieMatch2) rowClass += ' three-day-jing-die';
                 else if (isHighRatioMatch2) rowClass += ' high-ratio';
 
                 const topicAllowsExpand = group.topic !== '其它' && group.topic !== '并购重组';
@@ -1054,8 +1060,10 @@
                         const content = instance.proxy.$el.parentElement;
                         const jing1 = document.getElementById(p + 'SortByJingYestToggle');
                         const par1 = document.getElementById(p + 'SortByParallelToggle');
+                        const td1 = document.getElementById(p + 'SortByThreeDayJingDieToggle');
                         content.classList.toggle('jing-yest-enabled', !!(jing1 && jing1.checked));
                         content.classList.toggle('parallel-enabled', !!(par1 && par1.checked));
+                        content.classList.toggle('three-day-jing-die-enabled', !!(td1 && td1.checked));
                     }
                 } catch (e) {}
             }
@@ -1158,8 +1166,10 @@
                         const content = instance.proxy.$el.parentElement;
                         const jing2 = document.getElementById(p + 'SortByJingYestToggle2');
                         const par2 = document.getElementById(p + 'SortByParallelToggle2');
+                        const td2 = document.getElementById(p + 'SortByThreeDayJingDieToggle2');
                         content.classList.toggle('jing-yest-enabled', !!(jing2 && jing2.checked));
                         content.classList.toggle('parallel-enabled', !!(par2 && par2.checked));
+                        content.classList.toggle('three-day-jing-die-enabled', !!(td2 && td2.checked));
                     }
                 } catch (e) {}
             }

@@ -570,6 +570,8 @@
             const sortByParallelEnabled = document.getElementById(_p + 'SortByParallelToggle')?.checked;
             const sortByJingYestEnabled = document.getElementById(_p + 'SortByJingYestToggle')?.checked;
             const sortByJingYestRatioEnabled = document.getElementById(_p + 'SortByJingYestRatioToggle')?.checked;
+            const sortByThreeDayJingDieEnabled = document.getElementById(_p + 'SortByThreeDayJingDieToggle')?.checked;
+            const threeDayJingDieSet = sortByThreeDayJingDieEnabled ? window.getThreeDayJingDieSet(window.currentDate, dataSource) : null;
 
             if (sortByDataEnabled) {
                 const dataCountCache = renderOrder.map(idx => {
@@ -641,6 +643,25 @@
                         if (a.jr === null) return 1;
                         if (b.jr === null) return -1;
                         return b.jr - a.jr;
+                    })
+                    .map(x => x.idx);
+            } else if (sortByThreeDayJingDieEnabled) {
+                // "连续竞跌"排序：按下跌天数从多到少排，天数相同按占比(volume/yestVolume)从低到高排
+                renderOrder = renderOrder
+                    .map((idx, pos) => {
+                        const stockName = auctionList[idx] && auctionList[idx].stock ? auctionList[idx].stock.trim() : '';
+                        const dd = stockName && threeDayJingDieSet ? (threeDayJingDieSet.get(stockName) || 0) : 0;
+                        const vol = auctionList[idx] ? (parseFloat(auctionList[idx].volume) || 0) : 0;
+                        const yvol = auctionList[idx] ? (parseFloat(auctionList[idx].yestVolume) || 0) : 0;
+                        const jr = (vol > 0 && yvol > 0) ? (vol / yvol) : null;
+                        return { idx, pos, dd, jr };
+                    })
+                    .sort((a, b) => {
+                        if (a.dd !== b.dd) return b.dd - a.dd;
+                        if (a.jr === null && b.jr === null) return a.pos - b.pos;
+                        if (a.jr === null) return 1;
+                        if (b.jr === null) return -1;
+                        return a.jr - b.jr;
                     })
                     .map(x => x.idx);
             } else if (sortByParallelEnabled) {
@@ -736,9 +757,21 @@
             })();
 
             // [BUG-FIX 2026-07-27] 观察组成员 = 上一交易日"竞/昨"达标 ∪ "昨日买/持/卖"继承集合。
-            // 卖出标签同样进入观察组，不再剔除。
+            // 午出标签同样进入观察组，不再剔除。
             const _obsBoughtVisibleSet = new Set(_obsBoughtSet);
-            const _isObsMember = function(name) { return (_obsStocks && _obsStocks.has(name)) || _obsBoughtVisibleSet.has(name); };
+            // [BUG-FIX] 已在前一日打标签（买入/卖出/持有）的股票进常规组，不进观察组
+            // 防止被动继承的前日观察组股票被打标后仍留在观察组（如大晟文化 8/6 观察组 → 8/7 打持有 → 8/10 应进常规组）
+            const _taggedPrevDaySet = new Set();
+            auctionList.forEach(function(item) {
+                if (item && item.stock) {
+                    var ts = window.getAuctionTagState(item.stock.trim(), window.currentDate);
+                    if (ts.source === 'inherited') _taggedPrevDaySet.add(item.stock.trim());
+                }
+            });
+            const _isObsMember = function(name) {
+                if (_taggedPrevDaySet.has(name)) return false;
+                return (_obsStocks && _obsStocks.has(name)) || _obsBoughtVisibleSet.has(name);
+            };
             const _obsIndicesRaw = renderOrder.filter(i => auctionList[i] && auctionList[i].stock && _isObsMember(auctionList[i].stock.trim()));
 
             let _obsIndices, _regularIndices, _hiddenObsIndices;
@@ -823,10 +856,13 @@
                 const isJingYestMatch = jingYestToggleChecked && jingYestHighlightSet && item.stock && jingYestHighlightSet.has(item.stock.trim());
                 const isParallelMatch = sortByParallelEnabled && !jingYestToggleChecked && item.stock && parallelStocksToday.has(item.stock.trim());
                 const isHighRatioMatch = sortByRatioEnabled && item.stock && highRatioToday.stockNames.has(item.stock.trim());
+                const isThreeDayJingDieMatch = sortByThreeDayJingDieEnabled && threeDayJingDieSet && item.stock && threeDayJingDieSet.has(item.stock.trim());
                 if (isJingYestMatch) {
                     itemClass += ' jing-yest-match';
                 } else if (isParallelMatch) {
                     itemClass += ' parallel-match';
+                } else if (isThreeDayJingDieMatch) {
+                    itemClass += ' three-day-jing-die';
                 } else if (isHighRatioMatch) {
                     itemClass += ' high-ratio';
                 }

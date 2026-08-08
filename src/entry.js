@@ -16,6 +16,7 @@ import * as _mod_12 from './data/supabase-client.js';
 import * as _mod_13 from './data/watchlist-and-metrics.js';
 import * as _mod_14 from './logic/app-core.js';
 import * as _mod_15 from './logic/auction-sort-rules.js';
+import * as _mod_15b from './logic/sort-rules-extra.js';
 import * as _mod_16 from './logic/scope-helpers.js';
 import * as _mod_17 from './logic/tag-rules.js';
 import * as _mod_18 from './logic/topic-rules.js';
@@ -67,6 +68,7 @@ try { Object.assign(window, _mod_12); } catch(e) { console.warn('Failed to assig
 try { Object.assign(window, _mod_13); } catch(e) { console.warn('Failed to assign ./data/watchlist-and-metrics.js:', e.message); }
 try { Object.assign(window, _mod_14); } catch(e) { console.warn('Failed to assign ./logic/app-core.js:', e.message); }
 try { Object.assign(window, _mod_15); } catch(e) { console.warn('Failed to assign ./logic/auction-sort-rules.js:', e.message); }
+try { Object.assign(window, _mod_15b); } catch(e) { console.warn('Failed to assign ./logic/sort-rules-extra.js:', e.message); }
 try { Object.assign(window, _mod_16); } catch(e) { console.warn('Failed to assign ./logic/scope-helpers.js:', e.message); }
 try { Object.assign(window, _mod_17); } catch(e) { console.warn('Failed to assign ./logic/tag-rules.js:', e.message); }
 try { Object.assign(window, _mod_18); } catch(e) { console.warn('Failed to assign ./logic/topic-rules.js:', e.message); }

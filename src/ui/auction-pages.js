@@ -60,7 +60,9 @@
             // 是否开启"竞/昨"（在平行基础上，进一步要求 今/昨比 > 昨/前比）；集合本身不依赖开关，随时计算以便"竞/昨数"常驻显示
             const sortByJingYestEnabled2 = document.getElementById(_p + 'SortByJingYestToggle2')?.checked;
             const sortByJingYestRatioEnabled2 = document.getElementById(_p + 'SortByJingYestRatioToggle2')?.checked;
+            const sortByThreeDayJingDieEnabled2 = document.getElementById(_p + 'SortByThreeDayJingDieToggle2')?.checked;
             const parallelStockNames2 = (sortByParallelEnabled2 || sortByJingYestRatioEnabled2) ? window.getParallelStocksForDate(window.currentDate, dataSource) : null;
+            const threeDayJingDieSet2 = sortByThreeDayJingDieEnabled2 ? window.getThreeDayJingDieSet(window.currentDate, dataSource) : null;
             // "竞/昨"高光：统一用 getJingYestHighlightSetForDate（含 digitGap≤1 过滤），与第一页/排序 tier0 口径一致
             const jingYestHighlightSet2 = window.getJingYestHighlightSetForDate(window.currentDate, dataSource);
             // 若"竞/昨"（第二页）开启且高光子集为空，弹一次警示Toast；用同一个防抖标记避免与第一页同一时刻重复弹出
@@ -265,6 +267,25 @@
                             return b.jr - a.jr;
                         })
                         .map(x => x.s);
+                } else if (sortByThreeDayJingDieEnabled2) {
+                    // "连续竞跌"排序：按下跌天数从多到少排，天数相同按占比(volume/yestVolume)从低到高排
+                    stocksToRender = group.stocks
+                        .map((s, pos) => {
+                            const name = s.stock ? s.stock.trim() : '';
+                            const dd = name && threeDayJingDieSet2 ? (threeDayJingDieSet2.get(name) || 0) : 0;
+                            const vol = parseFloat(s.volume) || 0;
+                            const yvol = parseFloat(s.yestVolume) || 0;
+                            const jr = (vol > 0 && yvol > 0) ? (vol / yvol) : null;
+                            return { s, pos, dd, jr };
+                        })
+                        .sort((a, b) => {
+                            if (a.dd !== b.dd) return b.dd - a.dd;
+                            if (a.jr === null && b.jr === null) return a.pos - b.pos;
+                            if (a.jr === null) return 1;
+                            if (b.jr === null) return -1;
+                            return a.jr - b.jr;
+                        })
+                        .map(x => x.s);
                 } else if (sortByParallelEnabled2 && parallelStockNames2) {
                     if (sortByJingYestEnabled2) {
                         // "竞/昨"是"平行"的加强筛选，排序需三层：
@@ -401,10 +422,13 @@
                     const isJingYestMatch2 = (sortByJingYestEnabled2 || sortByJingYestRatioEnabled2) && jingYestHighlightSet2 && stock.stock && jingYestHighlightSet2.has(stock.stock.trim());
                     const isParallelMatch2 = sortByParallelEnabled2 && !sortByJingYestEnabled2 && !sortByJingYestRatioEnabled2 && parallelStockNames2 && stock.stock && parallelStockNames2.has(stock.stock.trim());
                     const isHighRatioMatch2 = sortByRatioEnabled2 && stock.stock && highRatioInfo2.stockNames.has(stock.stock.trim());
+                    const isThreeDayJingDieMatch2 = sortByThreeDayJingDieEnabled2 && threeDayJingDieSet2 && stock.stock && threeDayJingDieSet2.has(stock.stock.trim());
                     if (isJingYestMatch2) {
                         rowClass += ' jing-yest-match';
                     } else if (isParallelMatch2) {
                         rowClass += ' parallel-match';
+                    } else if (isThreeDayJingDieMatch2) {
+                        rowClass += ' three-day-jing-die';
                     } else if (isHighRatioMatch2) {
                         rowClass += ' high-ratio';
                     }
@@ -3387,23 +3411,27 @@
                 const pa = document.getElementById(pre + 'SortByParallelToggle2');
                 const j = document.getElementById(pre + 'SortByJingYestToggle2');
                 const jr = document.getElementById(pre + 'SortByJingYestRatioToggle2');
+                const td = document.getElementById(pre + 'SortByThreeDayJingDieToggle2');
                 const s = window.auctionStore.sortStateP2[p];
                 s.byRatio = !!(r && r.checked);
                 s.byParallel = !!(pa && pa.checked);
                 s.byJingYest = !!(j && j.checked);
                 s.byJingYestRatio = !!(jr && jr.checked);
+                s.byThreeDayJingDie = !!(td && td.checked);
             } else {
                 const d = document.getElementById(pre + 'SortByDataToggle');
                 const r = document.getElementById(pre + 'SortByRatioToggle');
                 const pa = document.getElementById(pre + 'SortByParallelToggle');
                 const j = document.getElementById(pre + 'SortByJingYestToggle');
                 const jr = document.getElementById(pre + 'SortByJingYestRatioToggle');
+                const td = document.getElementById(pre + 'SortByThreeDayJingDieToggle');
                 const s = window.auctionStore.sortState[p];
                 s.byData = !!(d && d.checked);
                 s.byRatio = !!(r && r.checked);
                 s.byParallel = !!(pa && pa.checked);
                 s.byJingYest = !!(j && j.checked);
                 s.byJingYestRatio = !!(jr && jr.checked);
+                s.byThreeDayJingDie = !!(td && td.checked);
             }
         }
 
@@ -3412,12 +3440,12 @@
         const _SORT_TOGGLE_KEY = 'auctionSortToggles_v1';
         const _SORT_TOGGLE_IDS = {
             auction: {
-                p1: ['auctionSortByDataToggle', 'auctionSortByRatioToggle', 'auctionSortByParallelToggle', 'auctionSortByJingYestToggle', 'auctionSortByJingYestRatioToggle'],
-                p2: ['auctionSortByRatioToggle2', 'auctionSortByParallelToggle2', 'auctionSortByJingYestToggle2', 'auctionSortByJingYestRatioToggle2']
+                p1: ['auctionSortByDataToggle', 'auctionSortByRatioToggle', 'auctionSortByParallelToggle', 'auctionSortByJingYestToggle', 'auctionSortByJingYestRatioToggle', 'auctionSortByThreeDayJingDieToggle'],
+                p2: ['auctionSortByRatioToggle2', 'auctionSortByParallelToggle2', 'auctionSortByJingYestToggle2', 'auctionSortByJingYestRatioToggle2', 'auctionSortByThreeDayJingDieToggle2']
             },
             hot: {
-                p1: ['hotSortByDataToggle', 'hotSortByRatioToggle', 'hotSortByParallelToggle', 'hotSortByJingYestToggle', 'hotSortByJingYestRatioToggle'],
-                p2: ['hotSortByRatioToggle2', 'hotSortByParallelToggle2', 'hotSortByJingYestToggle2', 'hotSortByJingYestRatioToggle2']
+                p1: ['hotSortByDataToggle', 'hotSortByRatioToggle', 'hotSortByParallelToggle', 'hotSortByJingYestToggle', 'hotSortByJingYestRatioToggle', 'hotSortByThreeDayJingDieToggle'],
+                p2: ['hotSortByRatioToggle2', 'hotSortByParallelToggle2', 'hotSortByJingYestToggle2', 'hotSortByJingYestRatioToggle2', 'hotSortByThreeDayJingDieToggle2']
             }
         };
 
@@ -3499,6 +3527,8 @@
                 if (parallelToggle2) parallelToggle2.checked = false;
                 if (jingYestToggle2) jingYestToggle2.checked = false;
                 if (jingYestRatioToggle2) jingYestRatioToggle2.checked = false;
+                const threeDayJingDieToggle2 = document.getElementById('auctionSortByThreeDayJingDieToggle2');
+                if (threeDayJingDieToggle2) threeDayJingDieToggle2.checked = false;
             }
             window._refreshAuctionPage2OnToggle('auction');
         }
@@ -3511,6 +3541,8 @@
                 // 与"环比"互斥，打开这个就关闭另一个
                 const ratioToggle2 = document.getElementById('auctionSortByRatioToggle2');
                 if (ratioToggle2) ratioToggle2.checked = false;
+                const threeDayJingDieToggle2 = document.getElementById('auctionSortByThreeDayJingDieToggle2');
+                if (threeDayJingDieToggle2) threeDayJingDieToggle2.checked = false;
             } else {
                 // 关闭"平行"时，"竞/昨"是平行的子条件，必须一并关闭
                 const jingYestToggle2 = document.getElementById('auctionSortByJingYestToggle2');
@@ -3548,14 +3580,14 @@
             const p = dataSource === 'hot' ? 'hot' : 'auction';
             const content = document.getElementById(p + 'Content');
             if (content) {
-                content.querySelectorAll('.jing-yest-match, .parallel-match').forEach(function(el) {
-                    el.classList.remove('jing-yest-match', 'parallel-match');
+                content.querySelectorAll('.jing-yest-match, .parallel-match, .three-day-jing-die').forEach(function(el) {
+                    el.classList.remove('jing-yest-match', 'parallel-match', 'three-day-jing-die');
                 });
             }
             const content2 = document.getElementById(p + 'Content2');
             if (content2) {
-                content2.querySelectorAll('.jing-yest-match, .parallel-match').forEach(function(el) {
-                    el.classList.remove('jing-yest-match', 'parallel-match');
+                content2.querySelectorAll('.jing-yest-match, .parallel-match, .three-day-jing-die').forEach(function(el) {
+                    el.classList.remove('jing-yest-match', 'parallel-match', 'three-day-jing-die');
                 });
             }
         }
@@ -3571,10 +3603,12 @@
             if (content) {
                 content.classList.toggle('jing-yest-enabled', enabled(document.getElementById(p + 'SortByJingYestToggle')) || enabled(document.getElementById(p + 'SortByJingYestRatioToggle')));
                 content.classList.toggle('parallel-enabled', enabled(document.getElementById(p + 'SortByParallelToggle')));
+                content.classList.toggle('three-day-jing-die-enabled', enabled(document.getElementById(p + 'SortByThreeDayJingDieToggle')));
             }
             if (content2) {
                 content2.classList.toggle('jing-yest-enabled', enabled(document.getElementById(p + 'SortByJingYestToggle2')) || enabled(document.getElementById(p + 'SortByJingYestRatioToggle2')));
                 content2.classList.toggle('parallel-enabled', enabled(document.getElementById(p + 'SortByParallelToggle2')));
+                content2.classList.toggle('three-day-jing-die-enabled', enabled(document.getElementById(p + 'SortByThreeDayJingDieToggle2')));
             }
         }
 
@@ -3612,6 +3646,8 @@
                 const jingYestRatioToggle2 = document.getElementById('auctionSortByJingYestRatioToggle2');
                 if (ratioToggle2) ratioToggle2.checked = false;
                 if (jingYestRatioToggle2) jingYestRatioToggle2.checked = false;
+                const threeDayJingDieToggle2 = document.getElementById('auctionSortByThreeDayJingDieToggle2');
+                if (threeDayJingDieToggle2) threeDayJingDieToggle2.checked = false;
                 if (parallelToggle2) parallelToggle2.checked = true;
             } else {
                 // 关闭"竞/昨" → 联动关闭"平行"
@@ -3632,6 +3668,8 @@
                 if (ratioToggle2) ratioToggle2.checked = false;
                 if (parallelToggle2) parallelToggle2.checked = false;
                 if (jingYestToggle2) jingYestToggle2.checked = false;
+                const threeDayJingDieToggle2 = document.getElementById('auctionSortByThreeDayJingDieToggle2');
+                if (threeDayJingDieToggle2) threeDayJingDieToggle2.checked = false;
             } else {
                 window._clearAuctionRowHighlights('auction');
             }
@@ -3667,6 +3705,8 @@
                 if (jingYestToggle) jingYestToggle.checked = false;
                 const jingYestRatioToggle = document.getElementById('auctionSortByJingYestRatioToggle');
                 if (jingYestRatioToggle) jingYestRatioToggle.checked = false;
+                const threeDayJingDieToggle = document.getElementById('auctionSortByThreeDayJingDieToggle');
+                if (threeDayJingDieToggle) threeDayJingDieToggle.checked = false;
             }
             // 重新渲染以应用新的排序顺序（renderAuction 内部会读取开关的最新状态）
             window._refreshAuctionOnToggle('auction');
@@ -3686,6 +3726,8 @@
                 if (parallelToggle) parallelToggle.checked = false;
                 if (jingYestToggle) jingYestToggle.checked = false;
                 if (jingYestRatioToggle) jingYestRatioToggle.checked = false;
+                const threeDayJingDieToggle = document.getElementById('auctionSortByThreeDayJingDieToggle');
+                if (threeDayJingDieToggle) threeDayJingDieToggle.checked = false;
                 // 注意：不联动打开"全部展开"，需用户手动开启
             }
             window._refreshAuctionOnToggle('auction');
@@ -3701,6 +3743,8 @@
                 const ratioToggle = document.getElementById('auctionSortByRatioToggle');
                 if (sortToggle) sortToggle.checked = false;
                 if (ratioToggle) ratioToggle.checked = false;
+                const threeDayJingDieToggle = document.getElementById('auctionSortByThreeDayJingDieToggle');
+                if (threeDayJingDieToggle) threeDayJingDieToggle.checked = false;
                 // 注意：不再联动打开"全部展开"，需用户手动开启（与第二页保持一致）
             } else {
                 // 关闭"平行"时，"竞/昨"是平行的子条件，必须一并关闭，否则条件失去依据
@@ -3727,6 +3771,8 @@
                 if (sortToggle) sortToggle.checked = false;
                 if (ratioToggle) ratioToggle.checked = false;
                 if (jingYestRatioToggle) jingYestRatioToggle.checked = false;
+                const threeDayJingDieToggle = document.getElementById('auctionSortByThreeDayJingDieToggle');
+                if (threeDayJingDieToggle) threeDayJingDieToggle.checked = false;
                 if (parallelToggle) parallelToggle.checked = true;
             } else {
                 // 关闭"竞/昨" → 联动关闭"平行"
@@ -3752,10 +3798,52 @@
                 if (ratioToggle) ratioToggle.checked = false;
                 if (parallelToggle) parallelToggle.checked = false;
                 if (jingYestToggle) jingYestToggle.checked = false;
+                const threeDayJingDieToggle = document.getElementById('auctionSortByThreeDayJingDieToggle');
+                if (threeDayJingDieToggle) threeDayJingDieToggle.checked = false;
             } else {
                 window._clearAuctionRowHighlights('auction');
             }
             window._refreshAuctionOnToggle('auction');
+        }
+
+        // "三天竞跌"开关变化时的处理（竞价股票）：独立排序模式
+        export function onAuctionSortByThreeDayJingDieToggleChange() {
+            window.resetAuctionExpansionOnToggle('auction', false);
+            const checked = document.getElementById('auctionSortByThreeDayJingDieToggle').checked;
+            if (checked) {
+                const sortToggle = document.getElementById('auctionSortByDataToggle');
+                const ratioToggle = document.getElementById('auctionSortByRatioToggle');
+                const parallelToggle = document.getElementById('auctionSortByParallelToggle');
+                const jingYestToggle = document.getElementById('auctionSortByJingYestToggle');
+                const jingYestRatioToggle = document.getElementById('auctionSortByJingYestRatioToggle');
+                if (sortToggle) sortToggle.checked = false;
+                if (ratioToggle) ratioToggle.checked = false;
+                if (parallelToggle) parallelToggle.checked = false;
+                if (jingYestToggle) jingYestToggle.checked = false;
+                if (jingYestRatioToggle) jingYestRatioToggle.checked = false;
+            } else {
+                window._clearAuctionRowHighlights('auction');
+            }
+            window._refreshAuctionOnToggle('auction');
+        }
+
+        // 第二页"三天竞跌"开关变化时的处理（竞价股票）：独立排序模式
+        export function onAuctionSortByThreeDayJingDieToggle2Change() {
+            window.resetAuctionExpansionOnToggle('auction', true);
+            const checked = document.getElementById('auctionSortByThreeDayJingDieToggle2').checked;
+            if (checked) {
+                const ratioToggle2 = document.getElementById('auctionSortByRatioToggle2');
+                const parallelToggle2 = document.getElementById('auctionSortByParallelToggle2');
+                const jingYestToggle2 = document.getElementById('auctionSortByJingYestToggle2');
+                const jingYestRatioToggle2 = document.getElementById('auctionSortByJingYestRatioToggle2');
+                if (ratioToggle2) ratioToggle2.checked = false;
+                if (parallelToggle2) parallelToggle2.checked = false;
+                if (jingYestToggle2) jingYestToggle2.checked = false;
+                if (jingYestRatioToggle2) jingYestRatioToggle2.checked = false;
+            } else {
+                window._clearAuctionRowHighlights('auction');
+            }
+            window._refreshAuctionPage2OnToggle('auction');
         }
 
 
@@ -3787,6 +3875,8 @@
                 if (jingYestToggle) jingYestToggle.checked = false;
                 const jingYestRatioToggle = document.getElementById('hotSortByJingYestRatioToggle');
                 if (jingYestRatioToggle) jingYestRatioToggle.checked = false;
+                const threeDayJingDieToggle = document.getElementById('hotSortByThreeDayJingDieToggle');
+                if (threeDayJingDieToggle) threeDayJingDieToggle.checked = false;
             }
             window._refreshAuctionOnToggle('hot');
         }
@@ -3804,6 +3894,8 @@
                 if (parallelToggle) parallelToggle.checked = false;
                 if (jingYestToggle) jingYestToggle.checked = false;
                 if (jingYestRatioToggle) jingYestRatioToggle.checked = false;
+                const threeDayJingDieToggle = document.getElementById('hotSortByThreeDayJingDieToggle');
+                if (threeDayJingDieToggle) threeDayJingDieToggle.checked = false;
             }
             window._refreshAuctionOnToggle('hot');
         }
@@ -3817,6 +3909,8 @@
                 const ratioToggle = document.getElementById('hotSortByRatioToggle');
                 if (sortToggle) sortToggle.checked = false;
                 if (ratioToggle) ratioToggle.checked = false;
+                const threeDayJingDieToggle = document.getElementById('hotSortByThreeDayJingDieToggle');
+                if (threeDayJingDieToggle) threeDayJingDieToggle.checked = false;
             } else {
                 const jingYestToggle = document.getElementById('hotSortByJingYestToggle');
                 if (jingYestToggle) jingYestToggle.checked = false;
@@ -3838,6 +3932,8 @@
                 if (sortToggle) sortToggle.checked = false;
                 if (ratioToggle) ratioToggle.checked = false;
                 if (jingYestRatioToggle) jingYestRatioToggle.checked = false;
+                const threeDayJingDieToggle = document.getElementById('hotSortByThreeDayJingDieToggle');
+                if (threeDayJingDieToggle) threeDayJingDieToggle.checked = false;
                 if (parallelToggle) parallelToggle.checked = true;
             } else {
                 if (parallelToggle) parallelToggle.checked = false;
@@ -3859,6 +3955,8 @@
                 if (ratioToggle) ratioToggle.checked = false;
                 if (parallelToggle) parallelToggle.checked = false;
                 if (jingYestToggle) jingYestToggle.checked = false;
+                const threeDayJingDieToggle = document.getElementById('hotSortByThreeDayJingDieToggle');
+                if (threeDayJingDieToggle) threeDayJingDieToggle.checked = false;
             } else {
                 window._clearAuctionRowHighlights('hot');
             }
@@ -3889,6 +3987,8 @@
                 if (parallelToggle2) parallelToggle2.checked = false;
                 if (jingYestToggle2) jingYestToggle2.checked = false;
                 if (jingYestRatioToggle2) jingYestRatioToggle2.checked = false;
+                const threeDayJingDieToggle2 = document.getElementById('hotSortByThreeDayJingDieToggle2');
+                if (threeDayJingDieToggle2) threeDayJingDieToggle2.checked = false;
             }
             window._refreshAuctionPage2OnToggle('hot');
         }
@@ -3900,6 +4000,8 @@
             if (parallelChecked) {
                 const ratioToggle2 = document.getElementById('hotSortByRatioToggle2');
                 if (ratioToggle2) ratioToggle2.checked = false;
+                const threeDayJingDieToggle2 = document.getElementById('hotSortByThreeDayJingDieToggle2');
+                if (threeDayJingDieToggle2) threeDayJingDieToggle2.checked = false;
             } else {
                 const jingYestToggle2 = document.getElementById('hotSortByJingYestToggle2');
                 if (jingYestToggle2) jingYestToggle2.checked = false;
@@ -3919,6 +4021,8 @@
                 const jingYestRatioToggle2 = document.getElementById('hotSortByJingYestRatioToggle2');
                 if (ratioToggle2) ratioToggle2.checked = false;
                 if (jingYestRatioToggle2) jingYestRatioToggle2.checked = false;
+                const threeDayJingDieToggle2 = document.getElementById('hotSortByThreeDayJingDieToggle2');
+                if (threeDayJingDieToggle2) threeDayJingDieToggle2.checked = false;
                 if (parallelToggle2) parallelToggle2.checked = true;
             } else {
                 if (parallelToggle2) parallelToggle2.checked = false;
@@ -3938,6 +4042,48 @@
                 if (ratioToggle2) ratioToggle2.checked = false;
                 if (parallelToggle2) parallelToggle2.checked = false;
                 if (jingYestToggle2) jingYestToggle2.checked = false;
+                const threeDayJingDieToggle2 = document.getElementById('hotSortByThreeDayJingDieToggle2');
+                if (threeDayJingDieToggle2) threeDayJingDieToggle2.checked = false;
+            } else {
+                window._clearAuctionRowHighlights('hot');
+            }
+            window._refreshAuctionPage2OnToggle('hot');
+        }
+
+        // "三天竞跌"开关变化时的处理（热门股票）：独立排序模式
+        export function onHotSortByThreeDayJingDieToggleChange() {
+            window.resetAuctionExpansionOnToggle('hot', false);
+            const checked = document.getElementById('hotSortByThreeDayJingDieToggle').checked;
+            if (checked) {
+                const sortToggle = document.getElementById('hotSortByDataToggle');
+                const ratioToggle = document.getElementById('hotSortByRatioToggle');
+                const parallelToggle = document.getElementById('hotSortByParallelToggle');
+                const jingYestToggle = document.getElementById('hotSortByJingYestToggle');
+                const jingYestRatioToggle = document.getElementById('hotSortByJingYestRatioToggle');
+                if (sortToggle) sortToggle.checked = false;
+                if (ratioToggle) ratioToggle.checked = false;
+                if (parallelToggle) parallelToggle.checked = false;
+                if (jingYestToggle) jingYestToggle.checked = false;
+                if (jingYestRatioToggle) jingYestRatioToggle.checked = false;
+            } else {
+                window._clearAuctionRowHighlights('hot');
+            }
+            window._refreshAuctionOnToggle('hot');
+        }
+
+        // 第二页"三天竞跌"开关变化时的处理（热门股票）：独立排序模式
+        export function onHotSortByThreeDayJingDieToggle2Change() {
+            window.resetAuctionExpansionOnToggle('hot', true);
+            const checked = document.getElementById('hotSortByThreeDayJingDieToggle2').checked;
+            if (checked) {
+                const ratioToggle2 = document.getElementById('hotSortByRatioToggle2');
+                const parallelToggle2 = document.getElementById('hotSortByParallelToggle2');
+                const jingYestToggle2 = document.getElementById('hotSortByJingYestToggle2');
+                const jingYestRatioToggle2 = document.getElementById('hotSortByJingYestRatioToggle2');
+                if (ratioToggle2) ratioToggle2.checked = false;
+                if (parallelToggle2) parallelToggle2.checked = false;
+                if (jingYestToggle2) jingYestToggle2.checked = false;
+                if (jingYestRatioToggle2) jingYestRatioToggle2.checked = false;
             } else {
                 window._clearAuctionRowHighlights('hot');
             }

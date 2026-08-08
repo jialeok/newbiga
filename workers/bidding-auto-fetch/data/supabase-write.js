@@ -42,3 +42,12 @@ export async function upsertMarketMetrics(env, rows) {
 export async function updateStockCodeMap(env, pairs) {
   // stockCodeMap 存在 localStorage，前端从 auction_watchlist 读取 code 回填
 }
+
+// [BUG-FIX] 读取指定日期的 auction_watchlist 股票列表，用于合并打标签/观察组股票到 worker 抓取名单
+export async function readAuctionWatchlistForDate(env, date) {
+  const url = CONFIG.SUPABASE_URL + '/rest/v1/auction_watchlist?date=eq.' + date + '&select=stock,code';
+  const resp = await fetch(url, { headers: sbHeaders(env) });
+  if (!resp.ok) return [];
+  const data = await resp.json();
+  return (data || []).map(r => ({ name: r.stock, code: r.code })).filter(s => s.name && s.code);
+}
