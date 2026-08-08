@@ -3577,65 +3577,124 @@
                     return;
                 }
 
-                window.setApiStatus('thsApiStatus', '正在请求同花顺接口获取涨幅（' + thscodes.length + ' 只股票）...', true);
-
-                // snapshot 接口支持批量查询（thscodes 逗号分隔，每批 ≤40 只）
-                // 注意：fuyao 对批里任何一只不认识的代码（典型：北交所 .BJ）会【整批报错】，
-                // 与热门股票版本同款对策：整批失败时降级为逐只请求，不认识的单只跳过。
-                const batchSize = 40;
-                let filledCount = 0;
-                let skippedCount = 0;
                 // 阶段四 Bug 5 收尾：改用字段级 patch 上报，只携带本次真正改动的 change_pct + note，
                 // 不再像 pushAuctionDataToCloud 那样把整行（含 volume/yest_volume/topics 等）一起带上——
                 // 这是原 bug（先点同花顺再点猫抓互相覆盖）的触发点之一。
+                let filledCount = 0;
+                let skippedCount = 0;
                 const changePctPatches = [];
 
-                for (let i = 0; i < thscodes.length; i += batchSize) {
-                    const chunk = thscodes.slice(i, i + batchSize);
-                    let data;
-                    try {
-                        data = await window.fuyaoApiGet('/api/a-share/prices/snapshot', { thscodes: chunk.join(',') });
-                    } catch (batchErr) {
-                        console.warn('snapshot 批量失败，降级逐只请求:', batchErr && batchErr.message);
-                        const rescued = [];
-                        for (let j = 0; j < chunk.length; j++) {
-                            try {
-                                const d1 = await window.fuyaoApiGet('/api/a-share/prices/snapshot', { thscodes: chunk[j] });
-                                if (d1 && d1.item) rescued.push.apply(rescued, d1.item);
-                            } catch (e1) {
-                                skippedCount++; // 该只代码 fuyao 不认识（北交所等），跳过
+                const isToday = (today === _computeBeijingToday());
+
+                if (isToday) {
+                    // 今天：snapshot 接口支持批量查询（thscodes 逗号分隔，每批 ≤40 只）
+                    // 注意：fuyao 对批里任何一只不认识的代码（典型：北交所 .BJ）会【整批报错】，
+                    // 与热门股票版本同款对策：整批失败时降级为逐只请求，不认识的单只跳过。
+                    window.setApiStatus('thsApiStatus', '正在请求同花顺接口获取涨幅（' + thscodes.length + ' 只股票）...', true);
+                    const batchSize = 40;
+                    for (let i = 0; i < thscodes.length; i += batchSize) {
+                        const chunk = thscodes.slice(i, i + batchSize);
+                        let data;
+                        try {
+                            data = await window.fuyaoApiGet('/api/a-share/prices/snapshot', { thscodes: chunk.join(',') });
+                        } catch (batchErr) {
+                            console.warn('snapshot 批量失败，降级逐只请求:', batchErr && batchErr.message);
+                            const rescued = [];
+                            for (let j = 0; j < chunk.length; j++) {
+                                try {
+                                    const d1 = await window.fuyaoApiGet('/api/a-share/prices/snapshot', { thscodes: chunk[j] });
+                                    if (d1 && d1.item) rescued.push.apply(rescued, d1.item);
+                                } catch (e1) {
+                                    skippedCount++; // 该只代码 fuyao 不认识（北交所等），跳过
+                                }
                             }
+                            data = { item: rescued };
                         }
-                        data = { item: rescued };
+                        const items = (data && data.item) || [];
+                        items.forEach(function(item) {
+                            const thscode = item.thscode;
+                            const pct = item.price_change_ratio_pct;
+                            const stock = stockMap[thscode];
+                            if (!stock) {
+                                skippedCount++;
+                                return;
+                            }
+                            if (pct === null || pct === undefined || pct === '') {
+                                skippedCount++;
+                                return;
+                            }
+                            const n = Number(pct);
+                            if (isNaN(n)) {
+                                skippedCount++;
+                                return;
+                            }
+                            if (!overwrite && ((stock.changePct || '').trim())) {
+                                skippedCount++; // 补全模式：已有值跳过
+                                return;
+                            }
+                            stock.changePct = (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+                            stock.note = window.buildNoteFromFields(stock.changePct, stock.topics);
+                            changePctPatches.push({ stock: stock.stock, change_pct: stock.changePct, note: stock.note });
+                            filledCount++;
+                        });
                     }
-                    const items = (data && data.item) || [];
-                    items.forEach(function(item) {
-                        const thscode = item.thscode;
-                        const pct = item.price_change_ratio_pct;
-                        const stock = stockMap[thscode];
-                        if (!stock) {
-                            skippedCount++;
-                            return;
-                        }
-                        if (pct === null || pct === undefined || pct === '') {
-                            skippedCount++;
-                            return;
-                        }
-                        const n = Number(pct);
-                        if (isNaN(n)) {
-                            skippedCount++;
-                            return;
-                        }
-                        if (!overwrite && ((stock.changePct || '').trim())) {
-                            skippedCount++; // 补全模式：已有值跳过
-                            return;
-                        }
-                        stock.changePct = (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
-                        stock.note = window.buildNoteFromFields(stock.changePct, stock.topics);
-                        // patch 只携带本次改动的字段：change_pct + note
-                        changePctPatches.push({ stock: stock.stock, change_pct: stock.changePct, note: stock.note });
-                        filledCount++;
-                    });
+                } else {
+                    // 历史日期：snapshot API 只返回实时数据，改用 historical API
+                    // 取目标日 + 前一交易日的 close_price 计算涨幅：(close[today] - close[prev]) / close[prev] * 100
+                    const prevDate = window.getPreviousTradingDay(today);
+                    if (!prevDate) {
+                        window.setApiStatus('thsApiStatus', '❌ 无法找到 ' + today + ' 的前一交易日', false);
+                        return;
+                    }
+                    // 时区安全：前后各扩 1 天（API date_ms 为北京时间午夜，不同浏览器时区下需扩窗口）
+                    const startMs = new Date(prevDate + 'T00:00:00').getTime() - 86400000;
+                    const endMs = new Date(today + 'T23:59:59').getTime() + 86400000;
+                    window.setApiStatus('thsApiStatus', '正在请求同花顺历史K线获取涨幅（' + thscodes.length + ' 只股票，日期 ' + today + '）...', true);
+                    // historical API 每次只接受一个 thscode，分批并发（每批 40 只）
+                    const batchSize = 40;
+                    for (let i = 0; i < thscodes.length; i += batchSize) {
+                        const batch = thscodes.slice(i, i + batchSize);
+                        await Promise.all(batch.map(async function(thscode) {
+                            const stock = stockMap[thscode];
+                            try {
+                                const data = await window.fuyaoApiGet('/api/a-share/prices/historical', {
+                                    thscode: thscode,
+                                    interval: '1d',
+                                    start: String(startMs),
+                                    end: String(endMs),
+                                    adjust: 'none'
+                                });
+                                const items = (data && data.item) || [];
+                                // 北京时间(UTC+8)日期匹配
+                                const closeByDate = {};
+                                items.forEach(function(it) {
+                                    if (it.date_ms != null && typeof it.close_price === 'number') {
+                                        var dBJ = new Date(it.date_ms + 8 * 3600 * 1000);
+                                        var ds = dBJ.getUTCFullYear() + '-' + String(dBJ.getUTCMonth() + 1).padStart(2, '0') + '-' + String(dBJ.getUTCDate()).padStart(2, '0');
+                                        closeByDate[ds] = it.close_price;
+                                    }
+                                });
+                                const c0 = closeByDate[prevDate];
+                                const c1 = closeByDate[today];
+                                if (typeof c0 !== 'number' || typeof c1 !== 'number' || c0 === 0) {
+                                    skippedCount++;
+                                    return;
+                                }
+                                if (!overwrite && ((stock.changePct || '').trim())) {
+                                    skippedCount++; // 补全模式：已有值跳过
+                                    return;
+                                }
+                                const pct = ((c1 - c0) / c0) * 100;
+                                stock.changePct = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+                                stock.note = window.buildNoteFromFields(stock.changePct, stock.topics);
+                                changePctPatches.push({ stock: stock.stock, change_pct: stock.changePct, note: stock.note });
+                                filledCount++;
+                            } catch (e) {
+                                console.warn('historical API 失败 ' + thscode + ':', e && e.message);
+                                skippedCount++;
+                            }
+                        }));
+                    }
                 }
 
                 auctionData[today] = todayList;
@@ -5457,72 +5516,131 @@
                     return;
                 }
 
-                window.setApiStatus('thsApiStatusHot', '正在请求同花顺接口获取涨幅（' + thscodes.length + ' 只股票）...', true);
-
-                // snapshot 接口支持批量查询（thscodes 逗号分隔，每批 ≤40 只）
-                // 注意：fuyao 对批里任何一只不认识的代码（典型：北交所 .BJ）会【整批报错】，
-                // 一只害死一批——这正是"热门股票获取涨幅抓不到数据"的根因（飙升榜+热股榜常含
-                // 北交所股票，而早盘竞价的 883410 成分股以主板为主所以没暴露）。
-                // 对策：整批失败时降级为逐只请求，不认识的单只跳过记 skipped。
-                const batchSize = 40;
                 let filledCount = 0;
                 let skippedCount = 0;
                 const changePctPatches = [];
 
-                for (let i = 0; i < thscodes.length; i += batchSize) {
-                    const chunk = thscodes.slice(i, i + batchSize);
-                    let data;
-                    try {
-                        data = await window.fuyaoApiGet('/api/a-share/prices/snapshot', { thscodes: chunk.join(',') });
-                    } catch (batchErr) {
-                        console.warn('snapshot 批量失败，降级逐只请求:', batchErr && batchErr.message);
-                        const rescued = [];
-                        for (let j = 0; j < chunk.length; j++) {
-                            try {
-                                const d1 = await window.fuyaoApiGet('/api/a-share/prices/snapshot', { thscodes: chunk[j] });
-                                if (d1 && d1.item) rescued.push.apply(rescued, d1.item);
-                            } catch (e1) {
-                                skippedCount++; // 该只代码 fuyao 不认识（北交所等），跳过
+                const isToday = (today === _computeBeijingToday());
+
+                if (isToday) {
+                    // 今天：snapshot 接口支持批量查询（thscodes 逗号分隔，每批 ≤40 只）
+                    // 注意：fuyao 对批里任何一只不认识的代码（典型：北交所 .BJ）会【整批报错】，
+                    // 一只害死一批——这正是"热门股票获取涨幅抓不到数据"的根因（飙升榜+热股榜常含
+                    // 北交所股票，而早盘竞价的 883410 成分股以主板为主所以没暴露）。
+                    // 对策：整批失败时降级为逐只请求，不认识的单只跳过记 skipped。
+                    window.setApiStatus('thsApiStatusHot', '正在请求同花顺接口获取涨幅（' + thscodes.length + ' 只股票）...', true);
+                    const batchSize = 40;
+                    for (let i = 0; i < thscodes.length; i += batchSize) {
+                        const chunk = thscodes.slice(i, i + batchSize);
+                        let data;
+                        try {
+                            data = await window.fuyaoApiGet('/api/a-share/prices/snapshot', { thscodes: chunk.join(',') });
+                        } catch (batchErr) {
+                            console.warn('snapshot 批量失败，降级逐只请求:', batchErr && batchErr.message);
+                            const rescued = [];
+                            for (let j = 0; j < chunk.length; j++) {
+                                try {
+                                    const d1 = await window.fuyaoApiGet('/api/a-share/prices/snapshot', { thscodes: chunk[j] });
+                                    if (d1 && d1.item) rescued.push.apply(rescued, d1.item);
+                                } catch (e1) {
+                                    skippedCount++; // 该只代码 fuyao 不认识（北交所等），跳过
+                                }
                             }
+                            data = { item: rescued };
                         }
-                        data = { item: rescued };
+                        const items = (data && data.item) || [];
+                        items.forEach(function(item) {
+                            const thscode = item.thscode;
+                            const pct = item.price_change_ratio_pct;
+                            const stock = stockMap[thscode];
+                            if (!stock) {
+                                skippedCount++;
+                                return;
+                            }
+                            // [BUG-FIX] 接口返回 thscode，如行内缺 code 则自动回填
+                            if (!stock.code && thscode) {
+                                const apiCode = String(thscode).replace(/\..*$/, '').trim();
+                                if (/^\d{6}$/.test(apiCode)) {
+                                    stock.code = apiCode;
+                                    codePatches.push({ stock: stock.stock, code: apiCode });
+                                }
+                            }
+                            if (pct === null || pct === undefined || pct === '') {
+                                skippedCount++;
+                                return;
+                            }
+                            const n = Number(pct);
+                            if (isNaN(n)) {
+                                skippedCount++;
+                                return;
+                            }
+                            if (!overwrite && ((stock.changePct || '').trim())) {
+                                skippedCount++; // 补全模式：已有值跳过
+                                return;
+                            }
+                            stock.changePct = (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+                            stock.note = window.buildNoteFromFields(stock.changePct, stock.topics);
+                            changePctPatches.push({ stock: stock.stock, change_pct: stock.changePct, note: stock.note });
+                            filledCount++;
+                        });
                     }
-                    const items = (data && data.item) || [];
-                    items.forEach(function(item) {
-                        const thscode = item.thscode;
-                        const pct = item.price_change_ratio_pct;
-                        const stock = stockMap[thscode];
-                        if (!stock) {
-                            skippedCount++;
-                            return;
-                        }
-                        // [BUG-FIX] 接口返回 thscode，如行内缺 code 则自动回填
-                        if (!stock.code && thscode) {
-                            const apiCode = String(thscode).replace(/\..*$/, '').trim();
-                            if (/^\d{6}$/.test(apiCode)) {
-                                stock.code = apiCode;
-                                codePatches.push({ stock: stock.stock, code: apiCode });
+                } else {
+                    // 历史日期：snapshot API 只返回实时数据，改用 historical API
+                    // 取目标日 + 前一交易日的 close_price 计算涨幅：(close[today] - close[prev]) / close[prev] * 100
+                    const prevDate = window.getPreviousTradingDay(today);
+                    if (!prevDate) {
+                        window.setApiStatus('thsApiStatusHot', '❌ 无法找到 ' + today + ' 的前一交易日', false);
+                        return;
+                    }
+                    // 时区安全：前后各扩 1 天（API date_ms 为北京时间午夜，不同浏览器时区下需扩窗口）
+                    const startMs = new Date(prevDate + 'T00:00:00').getTime() - 86400000;
+                    const endMs = new Date(today + 'T23:59:59').getTime() + 86400000;
+                    window.setApiStatus('thsApiStatusHot', '正在请求同花顺历史K线获取涨幅（' + thscodes.length + ' 只股票，日期 ' + today + '）...', true);
+                    // historical API 每次只接受一个 thscode，分批并发（每批 40 只）
+                    const batchSize = 40;
+                    for (let i = 0; i < thscodes.length; i += batchSize) {
+                        const batch = thscodes.slice(i, i + batchSize);
+                        await Promise.all(batch.map(async function(thscode) {
+                            const stock = stockMap[thscode];
+                            try {
+                                const data = await window.fuyaoApiGet('/api/a-share/prices/historical', {
+                                    thscode: thscode,
+                                    interval: '1d',
+                                    start: String(startMs),
+                                    end: String(endMs),
+                                    adjust: 'none'
+                                });
+                                const items = (data && data.item) || [];
+                                // 北京时间(UTC+8)日期匹配
+                                const closeByDate = {};
+                                items.forEach(function(it) {
+                                    if (it.date_ms != null && typeof it.close_price === 'number') {
+                                        var dBJ = new Date(it.date_ms + 8 * 3600 * 1000);
+                                        var ds = dBJ.getUTCFullYear() + '-' + String(dBJ.getUTCMonth() + 1).padStart(2, '0') + '-' + String(dBJ.getUTCDate()).padStart(2, '0');
+                                        closeByDate[ds] = it.close_price;
+                                    }
+                                });
+                                const c0 = closeByDate[prevDate];
+                                const c1 = closeByDate[today];
+                                if (typeof c0 !== 'number' || typeof c1 !== 'number' || c0 === 0) {
+                                    skippedCount++;
+                                    return;
+                                }
+                                if (!overwrite && ((stock.changePct || '').trim())) {
+                                    skippedCount++; // 补全模式：已有值跳过
+                                    return;
+                                }
+                                const pct = ((c1 - c0) / c0) * 100;
+                                stock.changePct = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+                                stock.note = window.buildNoteFromFields(stock.changePct, stock.topics);
+                                changePctPatches.push({ stock: stock.stock, change_pct: stock.changePct, note: stock.note });
+                                filledCount++;
+                            } catch (e) {
+                                console.warn('historical API 失败 ' + thscode + ':', e && e.message);
+                                skippedCount++;
                             }
-                        }
-                        if (pct === null || pct === undefined || pct === '') {
-                            skippedCount++;
-                            return;
-                        }
-                        const n = Number(pct);
-                        if (isNaN(n)) {
-                            skippedCount++;
-                            return;
-                        }
-                        if (!overwrite && ((stock.changePct || '').trim())) {
-                            skippedCount++; // 补全模式：已有值跳过
-                            return;
-                        }
-                        stock.changePct = (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
-                        stock.note = window.buildNoteFromFields(stock.changePct, stock.topics);
-                        // 字段级 PATCH：只上报本次改动的 change_pct/note
-                        changePctPatches.push({ stock: stock.stock, change_pct: stock.changePct, note: stock.note });
-                        filledCount++;
-                    });
+                        }));
+                    }
                 }
 
                 hotAuctionData[today] = todayList;
